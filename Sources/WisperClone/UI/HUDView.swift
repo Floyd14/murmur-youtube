@@ -6,7 +6,7 @@ struct HUDView: View {
     var body: some View {
         HStack(spacing: DS.Space.base) {
             Circle()
-                .fill(controller.state.isActive ? DettoBrand.Color.record : DettoBrand.Color.paperMuted)
+                .fill(controller.state.isActive ? WisperCloneBrand.Color.record : WisperCloneBrand.Color.paperMuted)
                 .frame(width: 7, height: 7)
 
             Waveform(level: controller.level, isActive: controller.state == .listening)
@@ -14,7 +14,7 @@ struct HUDView: View {
 
             Text(label)
                 .font(.system(size: 13, weight: .medium, design: .rounded))
-                .foregroundStyle(isError ? DettoBrand.Color.record : DettoBrand.Color.paper)
+                .foregroundStyle(isError ? WisperCloneBrand.Color.record : WisperCloneBrand.Color.paper)
                 .lineLimit(2)
                 .truncationMode(.head)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -25,10 +25,10 @@ struct HUDView: View {
         .frame(width: 340, height: 72)
         .background {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(DettoBrand.Color.charcoal.opacity(0.96))
+                .fill(WisperCloneBrand.Color.charcoal.opacity(0.96))
                 .overlay {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .strokeBorder(DettoBrand.Color.paperMuted.opacity(0.42), lineWidth: 1)
+                        .strokeBorder(WisperCloneBrand.Color.paperMuted.opacity(0.42), lineWidth: 1)
                 }
                 .shadow(color: .black.opacity(0.32), radius: 16, y: 7)
         }
@@ -65,7 +65,7 @@ private struct Waveform: View {
             HStack(alignment: .center, spacing: 3) {
                 ForEach(0..<Self.barCount, id: \.self) { index in
                     Capsule()
-                        .fill(DettoBrand.Color.paper)
+                        .fill(WisperCloneBrand.Color.paper)
                         .frame(width: 3, height: height(for: index, at: time))
                 }
             }

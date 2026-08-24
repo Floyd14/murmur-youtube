@@ -31,7 +31,7 @@ struct MainWindow: View {
 
             VStack(spacing: DS.Space.base) {
                 HStack {
-                    DettoWordmark(compact: true)
+                    WisperCloneWordmark(compact: true)
                     Spacer()
                     HStack(spacing: DS.Space.tight) {
                         Lamp(color: DS.Color.meterGreen, isLit: true)

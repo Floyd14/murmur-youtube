@@ -2,7 +2,7 @@
 import AppKit
 import Foundation
 
-// Icona piatta di Detto: pannello scuro, forma d'onda chiara e spia REC rossa.
+// Icona piatta di WisperClone: pannello scuro, forma d'onda chiara e spia REC rossa.
 // Nessun gradiente: la stessa grammatica visiva del registratore nell'app.
 let charcoal = NSColor(srgbRed: 0.09, green: 0.085, blue: 0.075, alpha: 1)
 let paper = NSColor(srgbRed: 0.88, green: 0.85, blue: 0.78, alpha: 1)

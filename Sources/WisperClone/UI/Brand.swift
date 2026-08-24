@@ -1,8 +1,8 @@
 import SwiftUI
 
-enum DettoBrand {
-    static let name = "Detto"
-    static let wordmark = "DETTO"
+enum WisperCloneBrand {
+    static let name = "WisperClone"
+    static let wordmark = "WISPER CLONE"
     static let tagline = "Parla. È già scritto."
 
     enum Color {
@@ -13,7 +13,7 @@ enum DettoBrand {
     }
 }
 
-struct DettoMark: View {
+struct WisperCloneMark: View {
     var size: CGFloat = 44
 
     private let bars: [CGFloat] = [0.34, 0.62, 1.0, 0.62, 0.34]
@@ -21,23 +21,23 @@ struct DettoMark: View {
     var body: some View {
         ZStack(alignment: .topTrailing) {
             RoundedRectangle(cornerRadius: size * 0.18, style: .continuous)
-                .fill(DettoBrand.Color.charcoal)
+                .fill(WisperCloneBrand.Color.charcoal)
                 .overlay {
                     RoundedRectangle(cornerRadius: size * 0.18, style: .continuous)
-                        .strokeBorder(DettoBrand.Color.paperMuted.opacity(0.42), lineWidth: 1)
+                        .strokeBorder(WisperCloneBrand.Color.paperMuted.opacity(0.42), lineWidth: 1)
                 }
 
             HStack(alignment: .center, spacing: size * 0.055) {
                 ForEach(Array(bars.enumerated()), id: \.offset) { _, height in
                     Capsule()
-                        .fill(DettoBrand.Color.paper)
+                        .fill(WisperCloneBrand.Color.paper)
                         .frame(width: size * 0.07, height: size * 0.42 * height)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             Circle()
-                .fill(DettoBrand.Color.record)
+                .fill(WisperCloneBrand.Color.record)
                 .frame(width: size * 0.12, height: size * 0.12)
                 .padding(size * 0.12)
         }
@@ -46,26 +46,26 @@ struct DettoMark: View {
     }
 }
 
-struct DettoWordmark: View {
+struct WisperCloneWordmark: View {
     var compact = false
 
     var body: some View {
         HStack(spacing: DS.Space.base) {
-            DettoMark(size: compact ? 34 : 46)
+            WisperCloneMark(size: compact ? 34 : 46)
 
             VStack(alignment: .leading, spacing: DS.Space.hair) {
-                Text(DettoBrand.wordmark)
+                Text(WisperCloneBrand.wordmark)
                     .font(.custom("Helvetica Neue", size: compact ? 15 : 19).weight(.bold))
                     .tracking(compact ? 2.4 : 3.2)
                     .foregroundStyle(DS.Color.inkOnDeck)
                 if !compact {
-                    Text(DettoBrand.tagline)
+                    Text(WisperCloneBrand.tagline)
                         .font(DS.Font.label)
                         .foregroundStyle(DS.Color.inkOnDeck.opacity(0.64))
                 }
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(DettoBrand.name). \(DettoBrand.tagline)")
+        .accessibilityLabel("\(WisperCloneBrand.name). \(WisperCloneBrand.tagline)")
     }
 }

@@ -1,8 +1,8 @@
-# Detto
+# WisperClone
 
 **Parla. È già scritto.**
 
-Detto è una dettatura push-to-talk nativa per macOS 26. Tieni premuto un tasto, parla e rilascialo: il testo viene trascritto sul dispositivo, ripulito e inserito nel campo attivo.
+WisperClone è una dettatura push-to-talk nativa per macOS 26. Tieni premuto un tasto, parla e rilascialo: il testo viene trascritto sul dispositivo, ripulito e inserito nel campo attivo.
 
 ## Privacy
 
@@ -41,7 +41,7 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer make install
 
 `make app` usa un certificato Developer ID quando è disponibile e altrimenti una firma ad hoc. Con la firma ad hoc macOS può richiedere nuovamente Accessibilità dopo una ricompilazione; una firma Developer ID stabile evita questo limite.
 
-Alla prima apertura l'onboarding di Detto:
+Alla prima apertura l'onboarding di WisperClone:
 
 1. spiega il funzionamento locale;
 2. guida la concessione di Accessibilità e Microfono;
@@ -82,4 +82,4 @@ codesign --verify --deep --strict "$HOME/Library/Caches/WisperCloneBuild/WisperC
 
 La validazione end-to-end voce → testo richiede una prova manuale con microfono reale in TextEdit, Note, browser e applicazioni Electron.
 
-`WisperClone` rimane il nome tecnico di eseguibile, cache e cartella Application Support per preservare i permessi TCC e i dati delle installazioni precedenti; il nome mostrato all'utente è Detto.
+Il nome tecnico e quello mostrato all'utente restano WisperClone, così bundle ID, permessi TCC e dati delle installazioni precedenti rimangono coerenti.

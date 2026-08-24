@@ -13,7 +13,7 @@ struct SettingsWindow: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: DS.Space.wide) {
-                    DettoWordmark()
+                    WisperCloneWordmark()
 
                     panel(label: "PUSH-TO-TALK") {
                         HStack(spacing: DS.Space.snug) {
@@ -78,7 +78,7 @@ struct SettingsWindow: View {
 
                         Spacer()
 
-                        Silkscreen(text: "DETTO 0.2 · LOCALE", color: DS.Color.inkOnDeck.opacity(0.64))
+                        Silkscreen(text: "WISPER CLONE 0.2 · LOCALE", color: DS.Color.inkOnDeck.opacity(0.64))
                     }
                 }
                 .padding(DS.Space.panel)

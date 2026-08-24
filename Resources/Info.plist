@@ -3,9 +3,9 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleName</key>
-	<string>Detto</string>
+	<string>WisperClone</string>
 	<key>CFBundleDisplayName</key>
-	<string>Detto</string>
+	<string>WisperClone</string>
 	<key>CFBundleExecutable</key>
 	<string>WisperClone</string>
 	<key>CFBundleIdentifier</key>
@@ -25,8 +25,8 @@
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Detto usa il microfono solo mentre tieni premuto il pulsante di dettatura.</string>
+	<string>WisperClone usa il microfono solo mentre tieni premuto il pulsante di dettatura.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Detto trascrive la voce sul dispositivo e inserisce il testo nell'app attiva.</string>
+	<string>WisperClone trascrive la voce sul dispositivo e inserisce il testo nell'app attiva.</string>
 </dict>
 </plist>

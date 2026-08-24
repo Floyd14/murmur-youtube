@@ -3,7 +3,7 @@ import AppKit
 import ApplicationServices
 import Foundation
 
-/// Detto richiede due autorizzazioni, entrambe indispensabili:
+/// WisperClone richiede due autorizzazioni, entrambe indispensabili:
 /// - **Microphone** — obviously.
 /// - **Accessibility** — for both the `CGEventTap` (hotkey) and the AX text insert.
 ///

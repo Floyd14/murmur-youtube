@@ -17,7 +17,7 @@ struct OnboardingView: View {
 
             VStack(spacing: DS.Space.wide) {
                 HStack {
-                    DettoWordmark()
+                    WisperCloneWordmark()
                     Spacer()
                     stepIndicator
                 }
@@ -69,7 +69,7 @@ struct OnboardingView: View {
                 .foregroundStyle(DS.Color.ink)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Text("Tieni premuto un tasto, parla e rilascialo. Detto trascrive in italiano e inserisce il risultato direttamente nell'app che stai usando.")
+            Text("Tieni premuto un tasto, parla e rilascialo. WisperClone trascrive in italiano e inserisce il risultato direttamente nell'app che stai usando.")
                 .font(DS.Font.body)
                 .foregroundStyle(DS.Color.inkSecondary)
                 .frame(maxWidth: 520, alignment: .leading)
@@ -115,7 +115,7 @@ struct OnboardingView: View {
                 }
             }
 
-            Text("Detto non richiede account, API key o servizi cloud.")
+            Text("WisperClone non richiede account, API key o servizi cloud.")
                 .font(DS.Font.label)
                 .foregroundStyle(DS.Color.inkSecondary)
 
