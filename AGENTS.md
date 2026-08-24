@@ -25,7 +25,7 @@ The Makefile deliberately keeps build products in `~/Library/Caches/WisperCloneB
 - Audio buffers from `AVAudioEngine` are borrowed and recycled. Copy them before crossing the callback boundary.
 - Audio reaches the transcription actor through one ordered `AsyncStream` drain. Do not spawn one unstructured task per buffer.
 - Accessibility writes can report success while doing nothing. Keep the caret-movement verification before falling back to clipboard paste.
-- TCC grants depend on bundle identity and code-signing requirements. Keep `com.andreavisini.wisperclone`, the executable name, install path, and signing strategy stable.
+- TCC grants depend on bundle identity and code-signing requirements. Keep `com.andreavisini.wisperclone.app`, the executable name, install path, and signing strategy stable.
 - `MainActor.assumeIsolated` asserts rather than checks. Use it only where execution on the main thread is guaranteed.
 
 ## Language behavior
