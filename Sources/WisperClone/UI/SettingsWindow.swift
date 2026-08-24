@@ -78,7 +78,7 @@ struct SettingsWindow: View {
 
                         Spacer()
 
-                        Silkscreen(text: "WISPER CLONE 0.2 · LOCALE", color: DS.Color.inkOnDeck.opacity(0.64))
+                        Silkscreen(text: versionLabel, color: DS.Color.inkOnDeck.opacity(0.64))
                     }
                 }
                 .padding(DS.Space.panel)
@@ -92,6 +92,11 @@ struct SettingsWindow: View {
                 try? await Task.sleep(for: .seconds(1))
             }
         }
+    }
+
+    private var versionLabel: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+        return "WISPER CLONE \(version ?? "—") · LOCALE"
     }
 
     private func panel<Content: View>(

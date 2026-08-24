@@ -69,8 +69,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             while !Permissions.hasAccessibility {
                 try? await Task.sleep(for: .seconds(1))
             }
-            controller.activate()
-            Log.app.info("Accessibilità concessa — scorciatoia attiva")
+
+            for attempt in 1...5 {
+                if controller.activate() {
+                    Log.app.info("Accessibilità concessa — scorciatoia attiva")
+                    return
+                }
+                Log.hotkey.error("attivazione scorciatoia fallita — tentativo \(attempt, privacy: .public)/5")
+                try? await Task.sleep(for: .seconds(1))
+            }
+            Log.hotkey.fault("impossibile attivare la scorciatoia dopo 5 tentativi")
         }
     }
 }

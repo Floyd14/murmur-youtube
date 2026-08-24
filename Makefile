@@ -1,5 +1,5 @@
 EXEC     := WisperClone
-CONFIG   := debug
+CONFIG   ?= release
 SCRATCH  := $(HOME)/Library/Caches/WisperCloneBuild/scratch
 BUILD    := $(SCRATCH)/$(CONFIG)/$(EXEC)
 STAGE    := $(HOME)/Library/Caches/WisperCloneBuild
@@ -9,7 +9,9 @@ CONTENTS := $(BUNDLE)/Contents
 
 DEVELOPER_ID := $(shell security find-identity -v -p codesigning 2>/dev/null \
                   | grep "Developer ID Application" | head -1 | sed -E 's/.*"(.*)".*/\1/')
-SIGN_ID := $(or $(strip $(DEVELOPER_ID)),-)
+APPLE_DEVELOPMENT_ID := $(shell security find-identity -v -p codesigning 2>/dev/null \
+                          | grep "Apple Development" | head -1 | sed -E 's/.*"(.*)".*/\1/')
+SIGN_ID := $(or $(strip $(DEVELOPER_ID)),$(strip $(APPLE_DEVELOPMENT_ID)),-)
 
 .PHONY: all build app run install clean icon
 

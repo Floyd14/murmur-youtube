@@ -39,7 +39,7 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer make build
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer make install
 ```
 
-`make app` usa un certificato Developer ID quando è disponibile e altrimenti una firma ad hoc. Con la firma ad hoc macOS può richiedere nuovamente Accessibilità dopo una ricompilazione; una firma Developer ID stabile evita questo limite.
+`make app` produce una build release e usa, nell'ordine, un certificato Developer ID, un certificato Apple Development oppure una firma ad hoc. Con la firma ad hoc macOS può richiedere nuovamente Accessibilità dopo una ricompilazione; una firma stabile evita questo limite.
 
 Alla prima apertura l'onboarding di WisperClone:
 
