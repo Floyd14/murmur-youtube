@@ -11,6 +11,46 @@ func engineForCurrentSetting() -> any TranscriptionEngine {
     }
 }
 
+private actor CompletionRace {
+    private var settled = false
+
+    func claim() -> Bool {
+        guard !settled else { return false }
+        settled = true
+        return true
+    }
+}
+
+private func completesWithin(
+    _ timeout: Duration,
+    operation: @escaping @Sendable () async -> Void
+) async -> Bool {
+    await withCheckedContinuation { continuation in
+        let race = CompletionRace()
+
+        Task {
+            await operation()
+            if await race.claim() { continuation.resume(returning: true) }
+        }
+
+        Task {
+            try? await Task.sleep(for: timeout)
+            if await race.claim() { continuation.resume(returning: false) }
+        }
+    }
+}
+
+private func finishEngineWithinDeadline(_ engine: any TranscriptionEngine) async -> Bool {
+    let finished = await completesWithin(.seconds(5)) {
+        await engine.finish()
+    }
+    guard !finished else { return true }
+
+    Log.speech.error("finalizzazione scaduta dopo 5 secondi — annullamento forzato")
+    Task { await engine.cancel() }
+    return false
+}
+
 @MainActor
 @Observable
 final class DictationController {
@@ -108,12 +148,12 @@ final class DictationController {
                 do {
                     chunks = try await engine.start()
                 } catch {
-                    await engine.finish()
+                    _ = await finishEngineWithinDeadline(engine)
                     throw error
                 }
 
                 guard self.isStarting(session) else {
-                    await engine.finish()
+                    _ = await finishEngineWithinDeadline(engine)
                     return
                 }
                 session.engine = engine
@@ -168,7 +208,23 @@ final class DictationController {
         capture.stop()
         level = 0
 
+        let watchdog = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(for: .seconds(8))
+            } catch {
+                return
+            }
+            guard let self,
+                  self.currentSession === session,
+                  self.state == .finishing
+            else { return }
+
+            Log.speech.fault("sessione bloccata in finalizzazione — ripristino forzato")
+            self.cancelDictation()
+        }
+
         Task { @MainActor [weak self] in
+            defer { watchdog.cancel() }
             guard let self else { return }
 
             // Se il tasto viene rilasciato durante permessi o caricamento modello, aspetta
@@ -182,9 +238,17 @@ final class DictationController {
             await session.feedTask?.value
             session.feedTask = nil
 
-            await session.engine?.finish()
+            var engineFinished = true
+            if let engine = session.engine {
+                engineFinished = await finishEngineWithinDeadline(engine)
+            }
             session.engine = nil
-            await session.consumeTask?.value
+
+            if engineFinished {
+                await session.consumeTask?.value
+            } else {
+                session.consumeTask?.cancel()
+            }
             session.consumeTask = nil
 
             guard self.currentSession === session else { return }
@@ -237,7 +301,9 @@ final class DictationController {
 
         let engine = session.engine
         session.engine = nil
-        Task { await engine?.finish() }
+        Task {
+            if let engine { _ = await finishEngineWithinDeadline(engine) }
+        }
 
         state = .idle
         transcript = ""
@@ -275,7 +341,9 @@ final class DictationController {
 
         let engine = session.engine
         session.engine = nil
-        Task { await engine?.finish() }
+        Task {
+            if let engine { _ = await finishEngineWithinDeadline(engine) }
+        }
 
         state = .error(message)
         level = 0

@@ -35,6 +35,9 @@ protocol TranscriptionEngine: Actor {
 
     /// Close the session and flush any pending final results.
     func finish() async
+
+    /// Abort immediately when graceful finalization exceeds its deadline.
+    func cancel() async
 }
 
 enum TranscriptionError: LocalizedError {
