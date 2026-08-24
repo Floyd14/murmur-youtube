@@ -35,6 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hud = HUDPanel(controller: controller)
 
         if !controller.activate() {
+            Permissions.promptForAccessibility()
             retryActivation()
         }
 
