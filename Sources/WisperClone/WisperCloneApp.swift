@@ -32,6 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
+        _ = DictionaryStore.shared
         hud = HUDPanel(controller: controller)
 
         if !controller.activate() {

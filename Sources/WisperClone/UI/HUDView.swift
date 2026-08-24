@@ -17,30 +17,28 @@ struct HUDView: View {
     @Bindable var controller: DictationController
 
     var body: some View {
-        HStack(spacing: 14) {
-            Waveform(level: controller.level, isActive: controller.state == .listening)
-                .frame(width: 76, height: 26)
-
-            Text(label)
-                .font(.system(size: 13, weight: .medium, design: .rounded))
-                .foregroundStyle(isError ? Color.red.opacity(0.9) : .primary.opacity(0.85))
-                .lineLimit(2)
-                .truncationMode(.head)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .animation(.easeOut(duration: 0.12), value: controller.transcript)
-        }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 14)
-        .frame(width: 340, height: 76)
+        Waveform(
+            level: controller.level,
+            isActive: controller.state == .listening,
+            style: isError
+                ? AnyShapeStyle(Color.red.opacity(0.9))
+                : AnyShapeStyle(HUDBrand.gradient)
+        )
+        .frame(width: 76, height: 26)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 13)
+        .frame(width: 108, height: 52)
         .background {
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(.ultraThinMaterial)
                 .overlay {
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
                         .strokeBorder(.white.opacity(0.12), lineWidth: 1)
                 }
                 .shadow(color: .black.opacity(0.28), radius: 18, y: 8)
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityStatus)
     }
 
     private var isError: Bool {
@@ -48,12 +46,12 @@ struct HUDView: View {
         return false
     }
 
-    private var label: String {
+    private var accessibilityStatus: String {
         switch controller.state {
-        case .starting: "Avvio…"
-        case .listening: controller.transcript.isEmpty ? "In ascolto…" : controller.transcript
-        case .finishing: controller.transcript.isEmpty ? "Trascrizione…" : controller.transcript
-        case .error(let message): message
+        case .starting: "Avvio dettatura"
+        case .listening: "In ascolto"
+        case .finishing: "Trascrizione"
+        case .error: "Errore di dettatura"
         case .idle: ""
         }
     }
@@ -62,6 +60,7 @@ struct HUDView: View {
 private struct Waveform: View {
     let level: Float
     let isActive: Bool
+    let style: AnyShapeStyle
 
     private static let barCount = 12
     private static let phases: [Double] = (0..<barCount).map { index in
@@ -74,7 +73,7 @@ private struct Waveform: View {
             HStack(alignment: .center, spacing: 3) {
                 ForEach(0..<Self.barCount, id: \.self) { index in
                     Capsule()
-                        .fill(HUDBrand.gradient)
+                        .fill(style)
                         .frame(width: 3, height: height(for: index, at: time))
                 }
             }

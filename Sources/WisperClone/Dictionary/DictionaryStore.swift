@@ -43,6 +43,7 @@ final class DictionaryStore {
     }
 
     private init() {
+        Self.installStarterDictionaryIfNeeded()
         load()
         startWatching()
     }
@@ -86,6 +87,14 @@ final class DictionaryStore {
     var biasPhrases: [String] { DictionaryCorrector.biasPhrases(from: entries) }
 
     // MARK: - Persistence
+
+    private static func installStarterDictionaryIfNeeded() {
+        let url = fileURL
+        guard !FileManager.default.fileExists(atPath: url.path) else { return }
+
+        let text = header + starterEntries + "\n"
+        try? text.write(to: url, atomically: true, encoding: .utf8)
+    }
 
     private func load() {
         guard let text = try? String(contentsOf: Self.fileURL, encoding: .utf8) else {
@@ -142,6 +151,28 @@ final class DictionaryStore {
         #
         # Puoi modificare direttamente questo file; l'app rileva le modifiche.
 
+        """
+
+    private static let starterEntries = """
+        # Termini italiani e tecnici iniziali
+        WisperClone
+        macOS
+        MacBook
+        iPhone
+        iPad
+        ChatGPT
+        OpenAI
+        Claude
+        Claude Code
+        GitHub
+        Xcode
+        Swift
+        SwiftUI
+
+        # Correzioni iniziali ad alta affidabilità
+        uisper clon -> WisperClone
+        whisper clone -> WisperClone
+        chat g p t -> ChatGPT
         """
 
     // MARK: - External edits
