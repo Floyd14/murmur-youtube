@@ -1,6 +1,10 @@
 import Foundation
 import Observation
 
+enum PreferenceKeys {
+    static let onboardingCompleted = "onboardingCompleted"
+}
+
 enum RecognitionLanguage: String, CaseIterable, Sendable {
     case italian
     case automatic

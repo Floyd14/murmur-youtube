@@ -206,12 +206,12 @@ private struct DictionaryEditor: View {
 
             VStack(alignment: .leading, spacing: DS.Space.base) {
                 if kind == .correction {
-                    field("Quando senti", text: $hear, prompt: "uisper clon")
+                    field("Quando senti", text: $hear, prompt: "detto app")
                 }
                 field(
                     kind == .correction ? "Scrivi" : "Parola o frase",
                     text: $write,
-                    prompt: kind == .correction ? "WisperClone" : "WisperClone"
+                    prompt: kind == .correction ? "Detto" : "Monte Bianco"
                 )
             }
 

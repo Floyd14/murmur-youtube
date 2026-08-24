@@ -1,8 +1,8 @@
-# Working on WisperClone
+# Working on Detto
 
 ## Product contract
 
-WisperClone is a native macOS 26 push-to-talk dictation app. Hold the configured modifier, speak, release, and the cleaned transcript is inserted into the focused text field.
+Detto is a native macOS 26 push-to-talk dictation app. Hold the configured modifier, speak, release, and the cleaned transcript is inserted into the focused text field. `WisperClone` remains the technical executable/module name to preserve existing TCC grants.
 
 The production path is local-only. Do not add cloud transcription, remote cleanup, transcript analytics, or integrations with other dictation apps without an explicit product decision and privacy review. Audio and transcripts must not be persisted or logged.
 
@@ -36,7 +36,7 @@ Rule-based cleanup must remain deterministic and covered by `WisperFormattingTes
 
 ## Design
 
-`Sources/WisperClone/UI/DesignSystem.swift` owns the reusable visual tokens. Red means recording; amber and green are instrumentation only. The current icon and palette are placeholders until the branding pass.
+`Sources/WisperClone/UI/DesignSystem.swift` owns reusable visual tokens and `UI/Brand.swift` owns the Detto identity. Red means recording; amber and green are instrumentation only. Keep the icon generator and in-app mark visually aligned, with no gradients.
 
 ## Manual checks
 

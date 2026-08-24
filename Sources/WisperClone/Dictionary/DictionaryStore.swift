@@ -9,9 +9,9 @@ import Observation
 /// adding a line in a hurry. The format is one entry per line:
 ///
 /// ```
-/// WisperClone
+/// Detto
 /// Monte Bianco
-/// uisper clon -> WisperClone
+/// detto app -> Detto
 /// # off: esempio errato -> Esempio corretto
 /// ```
 ///
@@ -134,10 +134,10 @@ final class DictionaryStore {
     }
 
     private static let header = """
-        # Dizionario WisperClone
+        # Dizionario Detto
         #
-        #   WisperClone                         termine da riconoscere
-        #   uisper clon -> WisperClone           correzione automatica
+        #   Detto                               termine da riconoscere
+        #   detto app -> Detto                  correzione automatica
         #   # off: regola errata -> Testo giusto   voce disattivata
         #
         # Puoi modificare direttamente questo file; l'app rileva le modifiche.

@@ -3,79 +3,95 @@ import SwiftUI
 struct SettingsWindow: View {
     @Bindable var controller: DictationController
     @State private var settings = Settings.shared
+    @AppStorage(PreferenceKeys.onboardingCompleted) private var onboardingCompleted = false
+    @State private var hasAccessibility = Permissions.hasAccessibility
+    @State private var hasMicrophone = Permissions.hasMicrophone
 
     var body: some View {
         ZStack {
             DS.Color.chassis.ignoresSafeArea()
 
-            VStack(alignment: .leading, spacing: DS.Space.wide) {
-                panel(label: "Pulsante push-to-talk") {
-                    HStack(spacing: DS.Space.snug) {
-                        ForEach(PushToTalkKey.allCases, id: \.self) { key in
-                            TransportKey(
-                                title: key.displayName,
-                                isEngaged: settings.pushToTalkKey == key,
-                                engagedColor: DS.Color.ink
-                            ) {
-                                settings.pushToTalkKey = key
-                                controller.reloadHotkey()
-                            }
-                            .background {
-                                if settings.pushToTalkKey == key {
-                                    RoundedRectangle(cornerRadius: DS.Radius.control)
-                                        .fill(DS.Color.selection)
+            ScrollView {
+                VStack(alignment: .leading, spacing: DS.Space.wide) {
+                    DettoWordmark()
+
+                    panel(label: "PUSH-TO-TALK") {
+                        HStack(spacing: DS.Space.snug) {
+                            ForEach(PushToTalkKey.allCases, id: \.self) { key in
+                                selectionKey(key.displayName, selected: settings.pushToTalkKey == key) {
+                                    settings.pushToTalkKey = key
+                                    controller.reloadHotkey()
                                 }
                             }
                         }
+                        note("Tieni premuto il tasto scelto in qualsiasi applicazione per dettare.")
                     }
-                    note("Tieni premuto questo tasto in qualsiasi applicazione per dettare.")
-                }
 
-                panel(label: "Lingua") {
-                    HStack(spacing: DS.Space.snug) {
-                        ForEach(RecognitionLanguage.allCases, id: \.self) { language in
-                            TransportKey(
-                                title: language.displayName,
-                                isEngaged: settings.recognitionLanguage == language,
-                                engagedColor: DS.Color.ink
-                            ) {
-                                settings.recognitionLanguage = language
-                            }
-                            .background {
-                                if settings.recognitionLanguage == language {
-                                    RoundedRectangle(cornerRadius: DS.Radius.control)
-                                        .fill(DS.Color.selection)
+                    panel(label: "LINGUA") {
+                        HStack(spacing: DS.Space.snug) {
+                            ForEach(RecognitionLanguage.allCases, id: \.self) { language in
+                                selectionKey(
+                                    language.displayName,
+                                    selected: settings.recognitionLanguage == language
+                                ) {
+                                    settings.recognitionLanguage = language
                                 }
                             }
                         }
+                        note("Italiano è il valore predefinito. Automatico usa la lingua principale del Mac.")
                     }
-                    note("Italiano è il valore predefinito. Automatico usa la lingua principale del Mac.")
+
+                    panel(label: "COMPORTAMENTO") {
+                        settingToggle("Pulisci esitazioni e punteggiatura", isOn: $settings.cleanupEnabled)
+                        settingToggle("Pulizia intelligente sul dispositivo", isOn: $settings.smartCleanup)
+                            .disabled(!FoundationModelFormatter.isAvailable || !settings.cleanupEnabled)
+                        settingToggle("Suoni di avvio e completamento", isOn: $settings.soundEnabled)
+
+                        if let reason = FoundationModelFormatter.unavailableReason {
+                            note(reason)
+                        } else {
+                            note("Apple Intelligence migliora il testo senza inviarlo a servizi esterni.")
+                        }
+                    }
+
+                    panel(label: "PRIVACY E PERMESSI") {
+                        permissionLine("Accessibilità", granted: hasAccessibility) {
+                            Permissions.promptForAccessibility()
+                            if !Permissions.hasAccessibility { Permissions.openAccessibilitySettings() }
+                        }
+                        permissionLine("Microfono", granted: hasMicrophone) {
+                            Task { @MainActor in
+                                hasMicrophone = await Permissions.requestMicrophone()
+                                if !hasMicrophone { Permissions.openMicrophoneSettings() }
+                            }
+                        }
+                        note("Audio e trascrizioni non vengono salvati. Il dizionario personale resta sul Mac.")
+                    }
+
+                    HStack {
+                        Button("Ripeti introduzione") {
+                            onboardingCompleted = false
+                        }
+                        .buttonStyle(.plain)
+                        .font(DS.Font.label)
+                        .foregroundStyle(DS.Color.inkOnDeck.opacity(0.64))
+
+                        Spacer()
+
+                        Silkscreen(text: "DETTO 0.2 · LOCALE", color: DS.Color.inkOnDeck.opacity(0.64))
+                    }
                 }
-
-                panel(label: "Pulizia") {
-                    Toggle(isOn: $settings.cleanupEnabled) {
-                        Silkscreen(text: "Pulisci le trascrizioni")
-                    }
-                    .toggleStyle(.switch)
-
-                    Toggle(isOn: $settings.smartCleanup) {
-                        Silkscreen(text: "Usa Apple Intelligence sul dispositivo")
-                    }
-                    .toggleStyle(.switch)
-                    .disabled(!FoundationModelFormatter.isAvailable || !settings.cleanupEnabled)
-
-                    if let reason = FoundationModelFormatter.unavailableReason {
-                        note(reason)
-                    } else {
-                        note("Rimuove esitazioni e sistema punteggiatura senza inviare il testo a servizi esterni.")
-                    }
-                }
-
-                Spacer()
+                .padding(DS.Space.panel)
             }
-            .padding(DS.Space.panel)
         }
-        .frame(width: 560, height: 560)
+        .frame(width: 620, height: 700)
+        .task {
+            while !Task.isCancelled {
+                hasAccessibility = Permissions.hasAccessibility
+                hasMicrophone = Permissions.hasMicrophone
+                try? await Task.sleep(for: .seconds(1))
+            }
+        }
     }
 
     private func panel<Content: View>(
@@ -89,6 +105,40 @@ struct SettingsWindow: View {
         .padding(DS.Space.roomy)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(BrushedPanel())
+    }
+
+    private func selectionKey(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        TransportKey(title: title, isEngaged: selected, engagedColor: DS.Color.ink, action: action)
+            .background {
+                if selected {
+                    RoundedRectangle(cornerRadius: DS.Radius.control)
+                        .fill(DS.Color.selection)
+                }
+            }
+    }
+
+    private func settingToggle(_ title: String, isOn: Binding<Bool>) -> some View {
+        Toggle(isOn: isOn) { Silkscreen(text: title) }
+            .toggleStyle(.switch)
+    }
+
+    private func permissionLine(
+        _ title: String,
+        granted: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        HStack(spacing: DS.Space.snug) {
+            Lamp(color: DS.Color.meterGreen, isLit: granted)
+            Text(title)
+                .font(DS.Font.body)
+                .foregroundStyle(DS.Color.ink)
+            Spacer()
+            if granted {
+                Silkscreen(text: "CONCESSO", color: DS.Color.inkSecondary)
+            } else {
+                TransportKey(title: "Concedi", action: action)
+            }
+        }
     }
 
     private func note(_ text: String) -> some View {

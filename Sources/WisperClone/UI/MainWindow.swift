@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MainWindow: View {
     @Bindable var controller: DictationController
+    @AppStorage(PreferenceKeys.onboardingCompleted) private var onboardingCompleted = false
     @State private var section: Section = .dictation
 
     enum Section: String, CaseIterable, Identifiable {
@@ -13,10 +14,32 @@ struct MainWindow: View {
     }
 
     var body: some View {
+        Group {
+            if onboardingCompleted {
+                dashboard
+            } else {
+                OnboardingView(controller: controller) {
+                    withAnimation(DS.Motion.panel) { onboardingCompleted = true }
+                }
+            }
+        }
+    }
+
+    private var dashboard: some View {
         ZStack {
             DS.Color.chassis.ignoresSafeArea()
 
             VStack(spacing: DS.Space.base) {
+                HStack {
+                    DettoWordmark(compact: true)
+                    Spacer()
+                    HStack(spacing: DS.Space.tight) {
+                        Lamp(color: DS.Color.meterGreen, isLit: true)
+                        Silkscreen(text: "SOLO SUL DISPOSITIVO", color: DS.Color.inkOnDeck.opacity(0.72))
+                    }
+                }
+                .padding(.horizontal, DS.Space.tight)
+
                 TransportPanel(controller: controller)
                 sectionKeys
 

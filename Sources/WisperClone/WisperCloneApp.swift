@@ -6,7 +6,7 @@ struct WisperCloneApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
     var body: some Scene {
-        Window("WisperClone", id: "main") {
+        Window("Detto", id: "main") {
             MainWindow(controller: delegate.controller)
         }
         .defaultSize(width: 780, height: 560)
@@ -35,12 +35,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hud = HUDPanel(controller: controller)
 
         if !controller.activate() {
-            Permissions.promptForAccessibility()
             retryActivation()
         }
 
         observeState()
-        Log.app.info("WisperClone pronto — tieni premuto \(Settings.shared.pushToTalkKey.displayName)")
+        Log.app.info("Detto pronto — tieni premuto \(Settings.shared.pushToTalkKey.displayName)")
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -80,6 +79,7 @@ private struct MenuContent: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
+        Text("DETTO")
         Text("Tieni premuto \(settings.pushToTalkKey.displayName) per dettare")
 
         Divider()
@@ -99,7 +99,7 @@ private struct MenuContent: View {
 
         Divider()
 
-        Button("Apri WisperClone") {
+        Button("Apri Detto") {
             openWindow(id: "main")
             NSApp.activate(ignoringOtherApps: true)
         }
@@ -111,7 +111,7 @@ private struct MenuContent: View {
             Button("Concedi Microfono…") { Permissions.openMicrophoneSettings() }
         }
 
-        Button("Esci da WisperClone") { NSApp.terminate(nil) }
+        Button("Esci da Detto") { NSApp.terminate(nil) }
             .keyboardShortcut("q")
     }
 }

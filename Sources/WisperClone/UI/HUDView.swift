@@ -1,47 +1,36 @@
 import SwiftUI
 
-/// Brand palette. Deliberately minimal for the skeleton — this is the surface the real
-/// branding pass will replace.
-enum Brand {
-    static let accent = Color(red: 0.42, green: 0.55, blue: 1.0)
-    static let accentWarm = Color(red: 0.76, green: 0.47, blue: 1.0)
-
-    static var gradient: LinearGradient {
-        LinearGradient(
-            colors: [accent, accentWarm],
-            startPoint: .leading,
-            endPoint: .trailing
-        )
-    }
-}
-
 struct HUDView: View {
     @Bindable var controller: DictationController
 
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: DS.Space.base) {
+            Circle()
+                .fill(controller.state.isActive ? DettoBrand.Color.record : DettoBrand.Color.paperMuted)
+                .frame(width: 7, height: 7)
+
             Waveform(level: controller.level, isActive: controller.state == .listening)
-                .frame(width: 76, height: 26)
+                .frame(width: 72, height: 26)
 
             Text(label)
                 .font(.system(size: 13, weight: .medium, design: .rounded))
-                .foregroundStyle(isError ? Color.red.opacity(0.9) : .primary.opacity(0.85))
+                .foregroundStyle(isError ? DettoBrand.Color.record : DettoBrand.Color.paper)
                 .lineLimit(2)
                 .truncationMode(.head)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .animation(.easeOut(duration: 0.12), value: controller.transcript)
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 14)
-        .frame(width: 340, height: 76)
+        .padding(.horizontal, DS.Space.roomy)
+        .padding(.vertical, DS.Space.base)
+        .frame(width: 340, height: 72)
         .background {
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(.ultraThinMaterial)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(DettoBrand.Color.charcoal.opacity(0.96))
                 .overlay {
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .strokeBorder(.white.opacity(0.12), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(DettoBrand.Color.paperMuted.opacity(0.42), lineWidth: 1)
                 }
-                .shadow(color: .black.opacity(0.28), radius: 18, y: 8)
+                .shadow(color: .black.opacity(0.32), radius: 16, y: 7)
         }
     }
 
@@ -61,26 +50,23 @@ struct HUDView: View {
     }
 }
 
-/// Level-reactive bars. Each bar gets a fixed phase offset so the group ripples rather
-/// than pumping in unison.
 private struct Waveform: View {
     let level: Float
     let isActive: Bool
 
-    private static let barCount = 12
+    private static let barCount = 11
     private static let phases: [Double] = (0..<barCount).map { index in
-        // Irrational multiplier keeps the offsets from lining up into a visible period.
         (Double(index) * 0.618).truncatingRemainder(dividingBy: 1)
     }
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !isActive)) { timeline in
-            let t = timeline.date.timeIntervalSinceReferenceDate
+            let time = timeline.date.timeIntervalSinceReferenceDate
             HStack(alignment: .center, spacing: 3) {
                 ForEach(0..<Self.barCount, id: \.self) { index in
                     Capsule()
-                        .fill(Brand.gradient)
-                        .frame(width: 3, height: height(for: index, at: t))
+                        .fill(DettoBrand.Color.paper)
+                        .frame(width: 3, height: height(for: index, at: time))
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -94,7 +80,6 @@ private struct Waveform: View {
         let phase = Self.phases[index]
         let wave = sin(time * 6.0 + phase * .pi * 2)
         let amplitude = CGFloat(max(0.04, level))
-        // Wave rides on top of the level so bars still breathe during quiet passages.
         let scaled = amplitude * (0.55 + 0.45 * CGFloat(wave))
         return floorHeight + max(0, scaled) * 23
     }

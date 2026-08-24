@@ -264,19 +264,19 @@
         },
         {
           "kind": "correction",
-          "hear": "uisper clon",
-          "write": "WisperClone"
+          "hear": "detto app",
+          "write": "Detto"
         }
       ],
-      "input": "clawed code beat uisper clon.",
-      "expected": "Claude Code beat WisperClone.",
+      "input": "clawed code beat detto app.",
+      "expected": "Claude Code beat Detto.",
       "expectedCorrections": [
         {
           "to": "Claude Code",
           "count": 1
         },
         {
-          "to": "WisperClone",
+          "to": "Detto",
           "count": 1
         }
       ]
