@@ -76,6 +76,7 @@ final class DictationController {
         var feedTask: Task<Void, Never>?
         var finishTask: Task<Void, Never>?
         var recordingWatchdog: Task<Void, Never>?
+        var listeningStartedAt: Date?
         var audioContinuation: AsyncStream<AudioChunk>.Continuation?
     }
 
@@ -151,12 +152,12 @@ final class DictationController {
                 do {
                     chunks = try await engine.start()
                 } catch {
-                    _ = await finishEngineWithinDeadline(engine)
+                    Task { await engine.cancel() }
                     throw error
                 }
 
                 guard self.isStarting(session) else {
-                    _ = await finishEngineWithinDeadline(engine)
+                    Task { await engine.cancel() }
                     return
                 }
                 session.engine = engine
@@ -185,6 +186,7 @@ final class DictationController {
                 )
 
                 guard self.isStarting(session) else { return }
+                session.listeningStartedAt = Date()
                 self.state = .listening
                 if Settings.shared.soundEnabled { NSSound(named: "Tink")?.play() }
 
@@ -261,9 +263,17 @@ final class DictationController {
             await session.feedTask?.value
             session.feedTask = nil
 
-            var engineFinished = true
+            let hasEnoughAudio = session.listeningStartedAt.map {
+                Date().timeIntervalSince($0) >= 0.35
+            } ?? false
+
+            var engineFinished = false
             if let engine = session.engine {
-                engineFinished = await finishEngineWithinDeadline(engine)
+                if hasEnoughAudio {
+                    engineFinished = await finishEngineWithinDeadline(engine)
+                } else {
+                    Task { await engine.cancel() }
+                }
             }
             session.engine = nil
 
@@ -275,6 +285,10 @@ final class DictationController {
             session.consumeTask = nil
 
             guard self.currentSession === session else { return }
+            guard hasEnoughAudio else {
+                self.resetToIdle(session: session)
+                return
+            }
 
             let raw = self.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !raw.isEmpty else {
