@@ -269,10 +269,13 @@ struct VUMeter: View {
     }
 
     var body: some View {
-        TimelineView(.animation) { timeline in
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !isActive)) { timeline in
             Canvas { context, size in
                 draw(in: &context, size: size, at: timeline.date)
             }
+        }
+        .onChange(of: isActive) { _, active in
+            if !active { movement = NeedleMovement() }
         }
         .background(DS.Color.meterFace)
         .overlay(
