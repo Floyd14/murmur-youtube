@@ -41,9 +41,6 @@ enum PushToTalkKey: String, CaseIterable, Sendable {
         }
     }
 
-    /// Swallowing `fn` would break fn+arrow, fn+delete and the emoji picker, so we let it
-    /// through. Dedicated right-hand modifiers are safe to consume.
-    var shouldConsumeEvent: Bool { self != .fn }
 }
 
 /// Watches for a held modifier key using a `CGEventTap`.
@@ -55,6 +52,7 @@ enum PushToTalkKey: String, CaseIterable, Sendable {
 final class HotkeyMonitor {
     private var tap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
+    private var releaseRecoveryTask: Task<Void, Never>?
     private var isPressed = false
 
     var key: PushToTalkKey = .rightOption
@@ -72,7 +70,9 @@ final class HotkeyMonitor {
         guard let tap = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
             place: .headInsertEventTap,
-            options: .defaultTap,
+            // Passive observation is a safety boundary: WisperClone can never suppress or
+            // delay Shift, Command, Option, fn, or any other system keyboard event.
+            options: .listenOnly,
             eventsOfInterest: CGEventMask(mask),
             callback: { _, type, event, refcon in
                 guard let refcon else { return Unmanaged.passUnretained(event) }
@@ -83,10 +83,10 @@ final class HotkeyMonitor {
                 // callback genuinely does run on the main thread.
                 let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
                 let flags = event.flags
-                let consume = MainActor.assumeIsolated {
+                MainActor.assumeIsolated {
                     monitor.handle(type: type, keyCode: keyCode, flags: flags)
                 }
-                return consume ? nil : Unmanaged.passUnretained(event)
+                return Unmanaged.passUnretained(event)
             },
             userInfo: refcon
         ) else {
@@ -113,27 +113,69 @@ final class HotkeyMonitor {
         }
         tap = nil
         runLoopSource = nil
+        releaseRecoveryTask?.cancel()
+        releaseRecoveryTask = nil
         isPressed = false
     }
 
     // MARK: - Tap callback
 
-    /// - Returns: `true` if the event should be swallowed rather than passed along.
-    private func handle(type: CGEventType, keyCode: Int64, flags: CGEventFlags) -> Bool {
-        // The system disables a tap that runs too slowly or is interrupted; re-arm it.
+    private func handle(type: CGEventType, keyCode: Int64, flags: CGEventFlags) {
+        // If macOS disables the tap while the key is held, its release can be lost. End the
+        // session before re-arming so the microphone and HUD can never remain latched on.
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            forceReleaseIfNeeded(reason: "event tap disabilitato")
             if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
-            return false
+            return
         }
 
-        guard type == .flagsChanged, keyCode == key.keyCode else { return false }
+        guard type == .flagsChanged, keyCode == key.keyCode else { return }
 
         let nowPressed = flags.contains(key.flag)
-        guard nowPressed != isPressed else { return false }
+        guard nowPressed != isPressed else { return }
         isPressed = nowPressed
 
-        if nowPressed { onPress?() } else { onRelease?() }
+        if nowPressed {
+            onPress?()
+            startReleaseRecovery()
+        } else {
+            releaseRecoveryTask?.cancel()
+            releaseRecoveryTask = nil
+            onRelease?()
+        }
+    }
 
-        return key.shouldConsumeEvent
+    /// Polls physical state only while the hotkey is held. This is a fallback for a dropped
+    /// `flagsChanged` release; it does not generate or consume keyboard events.
+    private func startReleaseRecovery() {
+        releaseRecoveryTask?.cancel()
+        releaseRecoveryTask = Task { @MainActor [weak self] in
+            while let self, self.isPressed {
+                do {
+                    try await Task.sleep(for: .milliseconds(100))
+                } catch {
+                    return
+                }
+
+                let stillDown = CGEventSource.keyState(
+                    .combinedSessionState,
+                    key: CGKeyCode(self.key.keyCode)
+                )
+                if !stillDown {
+                    self.forceReleaseIfNeeded(reason: "rilascio hotkey recuperato")
+                    return
+                }
+            }
+        }
+    }
+
+    private func forceReleaseIfNeeded(reason: String) {
+        releaseRecoveryTask?.cancel()
+        releaseRecoveryTask = nil
+        guard isPressed else { return }
+
+        isPressed = false
+        Log.hotkey.error("\(reason, privacy: .public)")
+        onRelease?()
     }
 }

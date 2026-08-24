@@ -74,6 +74,8 @@ final class DictationController {
         var engine: (any TranscriptionEngine)?
         var consumeTask: Task<Void, Never>?
         var feedTask: Task<Void, Never>?
+        var finishTask: Task<Void, Never>?
+        var recordingWatchdog: Task<Void, Never>?
         var audioContinuation: AsyncStream<AudioChunk>.Continuation?
     }
 
@@ -110,6 +112,7 @@ final class DictationController {
 
     @discardableResult
     func reloadHotkey() -> Bool {
+        cancelDictation()
         hotkey.stop()
         return activate()
     }
@@ -185,6 +188,21 @@ final class DictationController {
                 self.state = .listening
                 if Settings.shared.soundEnabled { NSSound(named: "Tink")?.play() }
 
+                session.recordingWatchdog = Task { @MainActor [weak self] in
+                    do {
+                        try await Task.sleep(for: .seconds(300))
+                    } catch {
+                        return
+                    }
+                    guard let self,
+                          self.currentSession === session,
+                          self.state == .listening
+                    else { return }
+
+                    Log.speech.fault("durata massima di registrazione raggiunta — arresto forzato")
+                    self.endDictation()
+                }
+
                 session.consumeTask = Task { @MainActor [weak self] in
                     guard let self else { return }
                     do {
@@ -205,12 +223,14 @@ final class DictationController {
     private func endDictation() {
         guard state.isActive, state != .finishing, let session = currentSession else { return }
         state = .finishing
+        session.recordingWatchdog?.cancel()
+        session.recordingWatchdog = nil
         capture.stop()
         level = 0
 
         let watchdog = Task { @MainActor [weak self] in
             do {
-                try await Task.sleep(for: .seconds(8))
+                try await Task.sleep(for: .seconds(15))
             } catch {
                 return
             }
@@ -223,8 +243,11 @@ final class DictationController {
             self.cancelDictation()
         }
 
-        Task { @MainActor [weak self] in
-            defer { watchdog.cancel() }
+        session.finishTask = Task { @MainActor [weak self] in
+            defer {
+                watchdog.cancel()
+                session.finishTask = nil
+            }
             guard let self else { return }
 
             // Se il tasto viene rilasciato durante permessi o caricamento modello, aspetta
@@ -271,6 +294,8 @@ final class DictationController {
             let cleaned = Settings.shared.cleanupEnabled
                 ? await selectedFormatter.format(raw)
                 : raw
+            guard self.currentSession === session else { return }
+
             let (output, corrections) = DictionaryStore.shared.corrector.apply(to: cleaned)
 
             if !corrections.isEmpty {
@@ -298,6 +323,10 @@ final class DictationController {
         session.startupTask?.cancel()
         session.feedTask?.cancel()
         session.consumeTask?.cancel()
+        session.finishTask?.cancel()
+        session.finishTask = nil
+        session.recordingWatchdog?.cancel()
+        session.recordingWatchdog = nil
 
         let engine = session.engine
         session.engine = nil
@@ -322,6 +351,8 @@ final class DictationController {
 
     private func resetToIdle(session: Session) {
         guard currentSession === session else { return }
+        session.recordingWatchdog?.cancel()
+        session.recordingWatchdog = nil
         currentSession = nil
         state = .idle
         transcript = ""
@@ -338,6 +369,10 @@ final class DictationController {
         session.audioContinuation = nil
         session.feedTask?.cancel()
         session.consumeTask?.cancel()
+        session.finishTask?.cancel()
+        session.finishTask = nil
+        session.recordingWatchdog?.cancel()
+        session.recordingWatchdog = nil
 
         let engine = session.engine
         session.engine = nil
