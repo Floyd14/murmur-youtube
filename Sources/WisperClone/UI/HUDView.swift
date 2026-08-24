@@ -1,36 +1,45 @@
 import SwiftUI
 
+private enum HUDBrand {
+    static let accent = Color(red: 0.42, green: 0.55, blue: 1.0)
+    static let accentWarm = Color(red: 0.76, green: 0.47, blue: 1.0)
+
+    static var gradient: LinearGradient {
+        LinearGradient(
+            colors: [accent, accentWarm],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+    }
+}
+
 struct HUDView: View {
     @Bindable var controller: DictationController
 
     var body: some View {
-        HStack(spacing: DS.Space.base) {
-            Circle()
-                .fill(controller.state.isActive ? WisperCloneBrand.Color.record : WisperCloneBrand.Color.paperMuted)
-                .frame(width: 7, height: 7)
-
+        HStack(spacing: 14) {
             Waveform(level: controller.level, isActive: controller.state == .listening)
-                .frame(width: 72, height: 26)
+                .frame(width: 76, height: 26)
 
             Text(label)
                 .font(.system(size: 13, weight: .medium, design: .rounded))
-                .foregroundStyle(isError ? WisperCloneBrand.Color.record : WisperCloneBrand.Color.paper)
+                .foregroundStyle(isError ? Color.red.opacity(0.9) : .primary.opacity(0.85))
                 .lineLimit(2)
                 .truncationMode(.head)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .animation(.easeOut(duration: 0.12), value: controller.transcript)
         }
-        .padding(.horizontal, DS.Space.roomy)
-        .padding(.vertical, DS.Space.base)
-        .frame(width: 340, height: 72)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 14)
+        .frame(width: 340, height: 76)
         .background {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(WisperCloneBrand.Color.charcoal.opacity(0.96))
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(.ultraThinMaterial)
                 .overlay {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .strokeBorder(WisperCloneBrand.Color.paperMuted.opacity(0.42), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .strokeBorder(.white.opacity(0.12), lineWidth: 1)
                 }
-                .shadow(color: .black.opacity(0.32), radius: 16, y: 7)
+                .shadow(color: .black.opacity(0.28), radius: 18, y: 8)
         }
     }
 
@@ -54,7 +63,7 @@ private struct Waveform: View {
     let level: Float
     let isActive: Bool
 
-    private static let barCount = 11
+    private static let barCount = 12
     private static let phases: [Double] = (0..<barCount).map { index in
         (Double(index) * 0.618).truncatingRemainder(dividingBy: 1)
     }
@@ -65,7 +74,7 @@ private struct Waveform: View {
             HStack(alignment: .center, spacing: 3) {
                 ForEach(0..<Self.barCount, id: \.self) { index in
                     Capsule()
-                        .fill(WisperCloneBrand.Color.paper)
+                        .fill(HUDBrand.gradient)
                         .frame(width: 3, height: height(for: index, at: time))
                 }
             }
