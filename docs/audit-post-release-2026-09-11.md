@@ -1,6 +1,6 @@
 # Audit dopo pubblicazione — WisperClone 0.3.0
 
-11 settembre 2026. Esito: correzioni del codice verificate, release pubblicata e installata; collaudo fisico ancora bloccato dai permessi TCC non concessi.
+11 settembre 2026. Esito: correzioni del codice verificate, release pubblicata e installata; permessi ripristinati e hotkey attiva. Collaudo con voce e tasto fisico ancora da eseguire.
 
 ## Artefatto verificato
 
@@ -60,16 +60,16 @@ I test simulati coincidono con i rami del diagramma relativi ad avvio, rilascio,
 - Dopo pubblicazione: rilettura API GitHub, risoluzione tag/branch remoto, hash ZIP, versione/build/hash/firma/processo installato e confronto del codice col tag.
 - UI dell'app installata aperta tramite controllo nativo: versione **0.3.0** e login **ATTIVO** osservati.
 
-## Blocco operativo e verifiche non eseguite
+## Ripristino operativo e verifiche non eseguite
 
-La stessa schermata delle impostazioni mostra **CONCEDI** per **Accessibilità** e **Microfono**. Pertanto il runtime non va dichiarato pronto per la dettatura. È stata chiesta l'autorizzazione per ripristinare questi due permessi; nessun reset o modifica diretta del database TCC è stato eseguito.
+La verifica iniziale ha mostrato permessi non concessi. Dopo autorizzazione esplicita di Andrea e autenticazione locale macOS, è stata rimossa la sola vecchia voce WisperClone da Accessibilità e aggiunta la copia in `/Applications/WisperClone.app`. Il semplice off/on e riavvio non avevano risolto il disallineamento. La schermata dell’app ora conferma **Accessibilità CONCESSO**, **Microfono CONCESSO**, login **ATTIVO**. Il log del processo installato riporta l’attivazione del monitor hotkey alle **20:47:16 locali**. Nessun reset globale o modifica diretta del database TCC; nessun permesso delle altre app modificato.
 
-Dopo la concessione servono ancora:
+Restano da eseguire:
 
 1. prova italiana con Alt fisico, parlato immediato, parola breve e ultima sillaba;
 2. inserimento in TextEdit, Note, browser ed editor Electron;
 3. nuovo accesso al Mac per provare l'avvio al login, distinto dalla sola registrazione attiva.
 
-La copia 0.2.9 per rollback è conservata e la sua firma è stata verificata nella cache di build. Il registro di manutenzione è stato aggiornato con il nuovo login item preservando modifiche preesistenti. Il tentativo di audit globale del registro è stato fermato dopo 60 secondi: l'inventario globale non è stato dichiarato aggiornato.
+La copia 0.2.9 per rollback è conservata e la sua firma è stata verificata nella cache di build. Il registro di manutenzione è stato aggiornato e pubblicato separatamente con il nuovo login item (commit `02188be`), preservando modifiche preesistenti. Il tentativo di audit globale del registro è stato fermato dopo 60 secondi: l'inventario globale non è stato dichiarato aggiornato.
 
 Riferimento per il contratto di registrazione al login: [Apple SMAppService](https://developer.apple.com/documentation/servicemanagement/smappservice).

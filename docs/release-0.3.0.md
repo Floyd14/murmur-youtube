@@ -1,6 +1,6 @@
 # WisperClone 0.3.0
 
-Stato: versione pubblicata e installata, firma verificata e registrazione al login attiva. Vedi [audit dopo pubblicazione](audit-post-release-2026-09-11.md) per evidenze e blocco sui permessi TCC.
+Stato: versione pubblicata e installata, firma verificata e registrazione al login attiva. Vedi [audit dopo pubblicazione](audit-post-release-2026-09-11.md) per evidenze, ripristino dei permessi TCC e verifiche manuali rimanenti.
 
 ## Cosa cambia
 
