@@ -1,5 +1,7 @@
 # Audit dopo pubblicazione — WisperClone 0.3.0
 
+> **Aggiornamento successivo:** la 0.3.0 è crashata al primo callback audio reale alle 20:54:19 dell’11 settembre. I controlli riportati sotto sono storici e non attestano il funzionamento della dettatura. La causa è una closure AVAudio che ereditava il MainActor, invocata dalla coda audio. La correzione e le nuove verifiche sono descritte nella [release 0.3.1](release-0.3.1.md). Il rapporto macOS grezzo rimane locale.
+
 11 settembre 2026. Esito: correzioni del codice verificate, release pubblicata e installata; permessi ripristinati e hotkey attiva. Collaudo con voce e tasto fisico ancora da eseguire.
 
 ## Artefatto verificato

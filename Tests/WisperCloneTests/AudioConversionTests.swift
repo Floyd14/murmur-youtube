@@ -3,6 +3,18 @@ import Testing
 @testable import WisperClone
 
 struct AudioConversionTests {
+    @Test @MainActor func audioTapCanRunOffMainActor() async throws {
+        let capture = AudioCapture()
+        let handler = capture.makeTapHandler()
+        try await Task.detached {
+            let format = try #require(AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 1))
+            let buffer = try #require(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 64))
+            buffer.frameLength = 64
+            buffer.floatChannelData![0].initialize(repeating: 0, count: 64)
+            handler(buffer, AVAudioTime(sampleTime: 0, atRate: 48000))
+        }.value
+    }
+
     @Test func ownsAnIndependentInterleavedCopy() throws {
         let format = try #require(AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 48000, channels: 2, interleaved: true))
         let source = try #require(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 8))

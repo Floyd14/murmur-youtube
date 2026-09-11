@@ -36,9 +36,7 @@ final class AudioCapture: AudioCapturing, @unchecked Sendable {
             state.onFailure = onFailure
         }
         input.removeTap(onBus: 0)
-        input.installTap(onBus: 0, bufferSize: 2048, format: nativeFormat) { [weak self] buffer, _ in
-            self?.handle(buffer)
-        }
+        input.installTap(onBus: 0, bufferSize: 2048, format: nativeFormat, block: makeTapHandler())
         engine.prepare()
         do {
             try engine.start()
@@ -68,6 +66,13 @@ final class AudioCapture: AudioCapturing, @unchecked Sendable {
             state.onLevel = nil
             state.onFailure = nil
         }
+    }
+
+    // AVFAudio invokes this on its service queue. Creating the closure inside the
+    // MainActor-isolated start() inherits that actor and traps on the first buffer.
+    // Both the creation context and function type must permit off-main execution.
+    nonisolated func makeTapHandler() -> @Sendable (AVAudioPCMBuffer, AVAudioTime) -> Void {
+        { [weak self] buffer, _ in self?.handle(buffer) }
     }
 
     private nonisolated func handle(_ buffer: AVAudioPCMBuffer) {

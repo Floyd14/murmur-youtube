@@ -4,6 +4,8 @@
 
 WisperClone è una dettatura push-to-talk nativa per macOS 26. Tieni premuto il tasto configurato, parla e rilascialo: la voce viene trascritta sul dispositivo, ripulita e inserita nel campo attivo.
 
+La release 0.3.0 è stata superseduta dalla hotfix 0.3.1 dopo un crash osservato nel callback audio. La 0.3.1 build 13 è compilata e installata; avvio e arresto del microfono reale sono verificati, mentre la prova con Alt fisico e consegna del testo resta da completare. Vedi [stato e limiti della hotfix](docs/release-0.3.1.md).
+
 ## Privacy
 
 Il percorso di produzione è locale:
@@ -56,18 +58,19 @@ Alla prima apertura l'onboarding guida la concessione di Accessibilità e Microf
 
 ```mermaid
 flowchart TD
-    A[Alt premuto] --> B[Ingress audio FIFO 512]
-    B --> C[Unico drain ordinato]
-    C --> D[Conversione fuori dal callback + coda SpeechAnalyzer]
-    D --> E[Rilascio: flush della coda e della coda di conversione]
-    E --> F[Pulizia conservativa + dizionario]
-    F --> G[Inserimento AX verificato]
-    G -->|verificato| H[Idle]
-    G -->|non verificato o errore| I[HUD errore + copia/elimina per 5 minuti]
-    B -->|overflow| I
+    A[Alt premuto] --> C[Handler AVAudio nonisolato @Sendable]
+    C --> B[Ingress audio FIFO 512]
+    B --> D[Unico drain ordinato]
+    D --> E[Conversione fuori dal callback + coda SpeechAnalyzer]
+    E --> F[Rilascio: flush della coda e della coda di conversione]
+    F --> G[Pulizia conservativa + dizionario]
+    G --> H[Inserimento AX verificato]
+    H -->|verificato| I[Idle]
+    H -->|non verificato o errore| J[HUD errore + copia/elimina per 5 minuti]
+    B -->|overflow| J
 ```
 
-L'acquisizione parte prima della preparazione completa del motore, così il parlato immediato dopo Alt entra nella coda. Non esiste più una soglia fissa di 350 ms: le sessioni brevi vengono finalizzate quando contengono audio. Le due code FIFO hanno capacità 512 e l'overflow è riportato visibilmente. Il converter opera fuori dal callback audio e invia anche il tail al rilascio.
+L'acquisizione parte prima della preparazione completa del motore, così il parlato immediato dopo Alt entra nella coda. L'handler passato ad AVAudioEngine è creato in contesto `nonisolated` con tipo `@Sendable`, perché il callback arriva dal service queue audio e non dal MainActor. Non esiste più una soglia fissa di 350 ms: le sessioni brevi vengono finalizzate quando contengono audio. Le due code FIFO hanno capacità 512 e l'overflow è riportato visibilmente. Il converter opera fuori dal callback audio e invia anche il tail al rilascio.
 
 La pulizia intelligente è soggetta a timeout e a una validazione conservativa; in caso di parole eliminate, aggiunte o riordinate, oppure timeout viene usato il formatter deterministico. Il dizionario è persistito in modo transazionale e mantiene watcher per sostituzioni e scritture dirette. La capitalizzazione gestisce anche espansioni Unicode come `ß` → `SS`.
 
@@ -90,7 +93,7 @@ codesign --verify --deep --strict \
   "$HOME/Library/Caches/WisperCloneBuild/WisperClone.app"
 ```
 
-La verifica automatica eseguita per la release 0.3.0 (build 12) ha superato 29 test in 8 suite, oltre a build release e verifica della firma. I test coprono ingress audio, conversione e flush, controller, dizionario, pulizia e Unicode; non possono provare microfono reale, tasto Alt fisico, stato TCC, mantenimento del focus o inserimento in processi esterni.
+La suite della hotfix 0.3.1 build 13 ha superato 30 test in 8 suite, incluso il test che esegue l'handler audio fuori dal MainActor. I test coprono ingress audio, conversione e flush, controller, dizionario, pulizia e Unicode; non possono provare microfono reale, tasto Alt fisico, stato TCC, mantenimento del focus o inserimento in processi esterni. Build release, firma e installazione della hotfix sono verificate; il collaudo live resta aperto.
 
 La validazione manuale voce → testo resta necessaria in TextEdit, Note, un browser e un editor Electron, includendo una parola breve e una dettatura immediata dopo Alt. La verifica di login richiede un nuovo accesso a macOS; non è sostituita dal solo stato letto dall'app.
 
@@ -109,4 +112,4 @@ Il rollback previsto usa la copia firmata precedente nella cache locale, se pres
 /Users/andreavisini/Library/Caches/WisperCloneBuild/rollback/WisperClone-0.2.9.app
 ```
 
-La release 0.3.0 è preparata per il branch `feature/wisperclone-onboarding` e il tag `wisperclone-v0.3.0`; la pubblicazione e l'installazione finale devono essere verificate separatamente.
+La hotfix è identificata come 0.3.1 build 13. Il rollback previsto usa la copia firmata precedente nella cache locale; lo stato della pubblicazione e dell'installazione deve essere verificato dopo i gate runtime.
