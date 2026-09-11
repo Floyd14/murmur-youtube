@@ -21,4 +21,16 @@ struct TextFormatterTests {
         let output = await formatter.format("questa frase è già pronta!")
         #expect(output == "Questa frase è già pronta!")
     }
+
+    @Test("gestisce maiuscole Unicode che si espandono in più caratteri")
+    func uppercaseExpansion() async {
+        let output = await formatter.format("ßeta")
+        #expect(output == "SSeta.")
+    }
+
+    @Test("mantiene i grafemi Unicode composti a inizio frase")
+    func composedUnicodeGrapheme() async {
+        let output = await formatter.format("e\u{301}lan nuova riga ßeta")
+        #expect(output == "E\u{301}lan\nSSeta.")
+    }
 }

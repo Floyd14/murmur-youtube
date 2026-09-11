@@ -31,10 +31,10 @@ protocol TranscriptionEngine: Actor {
     func start() async throws -> AsyncThrowingStream<TranscriptionChunk, Error>
 
     /// Feed one buffer of captured microphone audio, already in `preferredInputFormat()`.
-    func feed(_ chunk: AudioChunk) async
+    func feed(_ chunk: AudioChunk) async throws
 
     /// Close the session and flush any pending final results.
-    func finish() async
+    func finish() async throws
 
     /// Abort immediately when graceful finalization exceeds its deadline.
     func cancel() async
@@ -45,6 +45,10 @@ enum TranscriptionError: LocalizedError {
     case modelInstallFailed(String)
     case noAudioFormat
     case notRunning
+    case captureFailed
+    case audioConversionFailed
+    case audioBufferOverflow
+    case timedOut
 
     var errorDescription: String? {
         switch self {
@@ -56,6 +60,14 @@ enum TranscriptionError: LocalizedError {
             return "Nessun formato audio compatibile disponibile."
         case .notRunning:
             return "Il motore di trascrizione non è attivo."
+        case .captureFailed:
+            return "Impossibile acquisire l'audio. Controlla il microfono e riprova."
+        case .audioConversionFailed:
+            return "Il formato del microfono è cambiato o la conversione è fallita. Riprova."
+        case .audioBufferOverflow:
+            return "Il motore non riesce a elaborare l'audio in tempo. Dettatura interrotta: riprova."
+        case .timedOut:
+            return "Il motore locale non ha risposto in tempo. Riprova."
         }
     }
 }

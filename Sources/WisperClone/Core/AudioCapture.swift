@@ -2,46 +2,43 @@ import AVFoundation
 import Foundation
 import Synchronization
 
-/// Cattura il microfono e converte ogni buffer nel formato richiesto dal motore STT.
-final class AudioCapture: @unchecked Sendable {
+@MainActor
+protocol AudioCapturing: AnyObject {
+    func start(onBuffer: @escaping @Sendable (AudioChunk) -> Void,
+               onLevel: @escaping @Sendable (Float) -> Void,
+               onFailure: @escaping @Sendable () -> Void) throws
+    func stop()
+}
+
+/// The callback copies borrowed native buffers. Conversion runs on the ordered drain.
+final class AudioCapture: AudioCapturing, @unchecked Sendable {
     private struct CallbackState: ~Copyable {
-        var converter: AVAudioConverter?
-        var outputFormat: AVAudioFormat?
         var onBuffer: (@Sendable (AudioChunk) -> Void)?
         var onLevel: (@Sendable (Float) -> Void)?
+        var onFailure: (@Sendable () -> Void)?
     }
-
     private let engine = AVAudioEngine()
-    private let callbackState = Mutex(
-        CallbackState(converter: nil, outputFormat: nil, onBuffer: nil, onLevel: nil)
-    )
+    private let callbackState = Mutex(CallbackState())
     private var isRunning = false
 
-    func start(
-        outputFormat: AVAudioFormat,
-        onBuffer: @escaping @Sendable (AudioChunk) -> Void,
-        onLevel: @escaping @Sendable (Float) -> Void
-    ) throws {
+    func start(onBuffer: @escaping @Sendable (AudioChunk) -> Void,
+               onLevel: @escaping @Sendable (Float) -> Void,
+               onFailure: @escaping @Sendable () -> Void) throws {
         guard !isRunning else { return }
-
         let input = engine.inputNode
         let nativeFormat = input.outputFormat(forBus: 0)
-        let converter = nativeFormat == outputFormat
-            ? nil
-            : AVAudioConverter(from: nativeFormat, to: outputFormat)
-
+        guard nativeFormat.sampleRate > 0, nativeFormat.channelCount > 0 else {
+            throw TranscriptionError.noAudioFormat
+        }
         callbackState.withLock { state in
-            state.converter = converter
-            state.outputFormat = outputFormat
             state.onBuffer = onBuffer
             state.onLevel = onLevel
+            state.onFailure = onFailure
         }
-
         input.removeTap(onBus: 0)
         input.installTap(onBus: 0, bufferSize: 2048, format: nativeFormat) { [weak self] buffer, _ in
             self?.handle(buffer)
         }
-
         engine.prepare()
         do {
             try engine.start()
@@ -50,115 +47,56 @@ final class AudioCapture: @unchecked Sendable {
             input.removeTap(onBus: 0)
             engine.stop()
             clearCallbackState()
-            throw error
+            throw TranscriptionError.captureFailed
         }
-
-        Log.audio.info("capture started — native \(nativeFormat.sampleRate)Hz → engine \(outputFormat.sampleRate)Hz")
+        Log.audio.info("native capture started")
     }
 
     func stop() {
-        guard isRunning else {
-            clearCallbackState()
-            return
+        if isRunning {
+            engine.inputNode.removeTap(onBus: 0)
+            engine.stop()
+            isRunning = false
         }
-
-        engine.inputNode.removeTap(onBus: 0)
-        engine.stop()
-        isRunning = false
+        // Synchronize with the last callback before closing the ingress stream.
         clearCallbackState()
-        Log.audio.info("capture stopped")
     }
 
-    private func clearCallbackState() {
+    private nonisolated func clearCallbackState() {
         callbackState.withLock { state in
-            state.converter = nil
-            state.outputFormat = nil
             state.onBuffer = nil
             state.onLevel = nil
+            state.onFailure = nil
         }
     }
 
-    private func handle(_ buffer: AVAudioPCMBuffer) {
+    private nonisolated func handle(_ buffer: AVAudioPCMBuffer) {
         callbackState.withLock { state in
+            guard state.onBuffer != nil, buffer.frameLength > 0 else { return }
+            guard let copy = Self.copy(buffer) else { state.onFailure?(); return }
             state.onLevel?(Self.rms(of: buffer))
-            guard let outputFormat = state.outputFormat else { return }
-
-            guard let converter = state.converter else {
-                if let copy = Self.copy(buffer) {
-                    state.onBuffer?(AudioChunk(buffer: copy))
-                }
-                return
-            }
-
-            let ratio = outputFormat.sampleRate / buffer.format.sampleRate
-            let capacity = AVAudioFrameCount((Double(buffer.frameLength) * ratio).rounded(.up)) + 64
-            guard let converted = AVAudioPCMBuffer(
-                pcmFormat: outputFormat,
-                frameCapacity: capacity
-            ) else { return }
-
-            nonisolated(unsafe) let input = buffer
-            let consumed = Latch()
-            var error: NSError?
-            let status = converter.convert(to: converted, error: &error) { _, outStatus in
-                guard !consumed.take() else {
-                    outStatus.pointee = .noDataNow
-                    return nil
-                }
-                outStatus.pointee = .haveData
-                return input
-            }
-
-            if let error {
-                Log.audio.error("conversion failed: \(error.localizedDescription)")
-                return
-            }
-            guard status != .error, converted.frameLength > 0 else { return }
-            state.onBuffer?(AudioChunk(buffer: converted))
+            state.onBuffer?(AudioChunk(buffer: copy))
         }
     }
 
-    private static func copy(_ buffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
+    nonisolated static func copy(_ buffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
         guard buffer.frameLength > 0,
-              let copy = AVAudioPCMBuffer(
-                pcmFormat: buffer.format,
-                frameCapacity: buffer.frameLength
-              )
+              let copy = AVAudioPCMBuffer(pcmFormat: buffer.format, frameCapacity: buffer.frameLength)
         else { return nil }
-
         copy.frameLength = buffer.frameLength
-        let channels = Int(buffer.format.channelCount)
-        let frames = Int(buffer.frameLength)
-
-        if let source = buffer.floatChannelData, let destination = copy.floatChannelData {
-            for channel in 0..<channels {
-                destination[channel].update(from: source[channel], count: frames)
-            }
-        } else if let source = buffer.int16ChannelData, let destination = copy.int16ChannelData {
-            for channel in 0..<channels {
-                destination[channel].update(from: source[channel], count: frames)
-            }
-        } else if let source = buffer.int32ChannelData, let destination = copy.int32ChannelData {
-            for channel in 0..<channels {
-                destination[channel].update(from: source[channel], count: frames)
-            }
-        } else {
-            return nil
+        let source = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: buffer.audioBufferList))
+        let destination = UnsafeMutableAudioBufferListPointer(copy.mutableAudioBufferList)
+        guard source.count == destination.count else { return nil }
+        // AudioBufferList also handles interleaved multichannel input correctly.
+        for index in source.indices {
+            guard let from = source[index].mData, let to = destination[index].mData,
+                  destination[index].mDataByteSize >= source[index].mDataByteSize else { return nil }
+            memcpy(to, from, Int(source[index].mDataByteSize))
         }
-
         return copy
     }
 
-    private final class Latch: @unchecked Sendable {
-        private var fired = false
-
-        func take() -> Bool {
-            defer { fired = true }
-            return fired
-        }
-    }
-
-    private static func rms(of buffer: AVAudioPCMBuffer) -> Float {
+    private nonisolated static func rms(of buffer: AVAudioPCMBuffer) -> Float {
         guard let channel = buffer.floatChannelData?[0] else { return 0 }
         let count = Int(buffer.frameLength)
         guard count > 0 else { return 0 }

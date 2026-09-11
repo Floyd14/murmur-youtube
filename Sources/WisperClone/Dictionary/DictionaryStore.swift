@@ -23,52 +23,93 @@ import Observation
 @MainActor
 @Observable
 final class DictionaryStore {
-    static let shared = DictionaryStore()
+    static let shared = DictionaryStore(
+        fileURL: fileURL,
+        installStarterDictionary: true,
+        watchChanges: true
+    )
 
     private(set) var entries: [DictionaryEntry] = []
+
+    /// A persistence failure stays visible until the failed operation succeeds or the user
+    /// dismisses it. In particular, a failed save must not look successful in the editor.
+    private(set) var persistenceError: String?
 
     /// Bumped whenever entries change, so the engine can rebuild its bias list lazily
     /// instead of on every transcription.
     private(set) var revision = 0
 
-    private var watcher: DispatchSourceFileSystemObject?
-    /// Set while we're writing, so our own save doesn't read back as an external edit.
-    private var isSaving = false
+    let dictionaryURL: URL
 
-    static var fileURL: URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("WisperClone", isDirectory: true)
-        try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
-        return base.appendingPathComponent("dictionary.txt")
+    private var directoryWatcher: DispatchSourceFileSystemObject?
+    private var fileWatcher: DispatchSourceFileSystemObject?
+    private var lastKnownFileContents: String?
+    private var persistenceErrorOperation: PersistenceOperation?
+
+    private enum PersistenceOperation {
+        case read
+        case write
     }
 
-    private init() {
-        Self.installStarterDictionaryIfNeeded()
-        load()
-        startWatching()
+    static var fileURL: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("WisperClone", isDirectory: true)
+            .appendingPathComponent("dictionary.txt")
+    }
+
+    /// The injectable URL keeps persistence and file-watching behavior testable without
+    /// touching the user's real dictionary.
+    init(
+        fileURL: URL = DictionaryStore.fileURL,
+        installStarterDictionary: Bool = true,
+        watchChanges: Bool = true
+    ) {
+        dictionaryURL = fileURL
+
+        if installStarterDictionary {
+            do {
+                try Self.installStarterDictionaryIfNeeded(at: fileURL)
+            } catch {
+                report(error, operation: .write, action: "creare")
+            }
+        }
+
+        reloadFromDisk()
+        if watchChanges { startWatching() }
     }
 
     // MARK: - Editing
 
-    func add(_ entry: DictionaryEntry) {
-        entries.append(entry)
-        save()
+    @discardableResult
+    func add(_ entry: DictionaryEntry) -> Bool {
+        commit(entries + [entry])
     }
 
-    func update(_ entry: DictionaryEntry) {
-        guard let index = entries.firstIndex(where: { $0.id == entry.id }) else { return }
-        entries[index] = entry
-        save()
+    @discardableResult
+    func update(_ entry: DictionaryEntry) -> Bool {
+        guard let index = entries.firstIndex(where: { $0.id == entry.id }) else {
+            persistenceError = "La voce non è più presente nel dizionario. Riapri l’editor e riprova."
+            persistenceErrorOperation = .write
+            return false
+        }
+        var updatedEntries = entries
+        updatedEntries[index] = entry
+        return commit(updatedEntries)
     }
 
-    func delete(_ entry: DictionaryEntry) {
-        entries.removeAll { $0.id == entry.id }
-        save()
+    @discardableResult
+    func delete(_ entry: DictionaryEntry) -> Bool {
+        commit(entries.filter { $0.id != entry.id })
     }
 
-    func delete(ids: Set<UUID>) {
-        entries.removeAll { ids.contains($0.id) }
-        save()
+    @discardableResult
+    func delete(ids: Set<UUID>) -> Bool {
+        commit(entries.filter { !ids.contains($0.id) })
+    }
+
+    func clearPersistenceError() {
+        persistenceError = nil
+        persistenceErrorOperation = nil
     }
 
     /// Case- and diacritic-insensitive search across both sides of an entry.
@@ -88,22 +129,57 @@ final class DictionaryStore {
 
     // MARK: - Persistence
 
-    private static func installStarterDictionaryIfNeeded() {
-        let url = fileURL
+    private static func installStarterDictionaryIfNeeded(at url: URL) throws {
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
         guard !FileManager.default.fileExists(atPath: url.path) else { return }
 
         let text = header + starterEntries + "\n"
-        try? text.write(to: url, atomically: true, encoding: .utf8)
+        try text.write(to: url, atomically: true, encoding: .utf8)
     }
 
-    private func load() {
-        guard let text = try? String(contentsOf: Self.fileURL, encoding: .utf8) else {
-            entries = []
-            revision += 1
+    /// Reloads a hand-edited file. A missing, temporarily replaced, or unreadable file never
+    /// destroys the last valid in-memory dictionary: editors commonly implement saves as a
+    /// delete/rename sequence and the watcher can observe the gap between those operations.
+    func reloadFromDisk() {
+        let text: String
+        do {
+            text = try String(contentsOf: dictionaryURL, encoding: .utf8)
+        } catch {
+            report(error, operation: .read, action: "leggere")
             return
         }
+
+        if persistenceErrorOperation == .read {
+            clearPersistenceError()
+        }
+        guard text != lastKnownFileContents else { return }
+
         entries = Self.parse(text)
+        lastKnownFileContents = text
         revision += 1
+    }
+
+    private func commit(_ candidateEntries: [DictionaryEntry]) -> Bool {
+        let text = Self.serialize(candidateEntries)
+        do {
+            try FileManager.default.createDirectory(
+                at: dictionaryURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try text.write(to: dictionaryURL, atomically: true, encoding: .utf8)
+        } catch {
+            report(error, operation: .write, action: "salvare")
+            return false
+        }
+
+        entries = candidateEntries
+        lastKnownFileContents = text
+        revision += 1
+        clearPersistenceError()
+        return true
     }
 
     static func parse(_ text: String) -> [DictionaryEntry] {
@@ -132,14 +208,16 @@ final class DictionaryStore {
         }
     }
 
-    private func save() {
-        revision += 1
-        isSaving = true
-        defer { isSaving = false }
-
+    private static func serialize(_ entries: [DictionaryEntry]) -> String {
         let body = entries.map(\.fileLine).joined(separator: "\n")
-        let text = Self.header + body + "\n"
-        try? text.write(to: Self.fileURL, atomically: true, encoding: .utf8)
+        return header + body + "\n"
+    }
+
+    private func report(_ error: Error, operation: PersistenceOperation, action: String) {
+        // A later watcher read must not hide a failed user-initiated save.
+        guard persistenceErrorOperation != .write || operation == .write else { return }
+        persistenceError = "Impossibile \(action) dictionary.txt: \(error.localizedDescription)"
+        persistenceErrorOperation = operation
     }
 
     private static let header = """
@@ -177,30 +255,67 @@ final class DictionaryStore {
 
     // MARK: - External edits
 
-    /// Watches the file so a hand edit shows up in the UI without a relaunch.
-    ///
-    /// Rearms after every event: an atomic write replaces the inode, so the descriptor we
-    /// were watching is gone the moment the file changes — including when *we* save.
+    /// Watches the containing directory rather than the dictionary inode. Atomic saves replace
+    /// that inode, while the directory remains stable across file deletion and recreation. A
+    /// second watcher follows the current file inode so direct, non-atomic edits are detected.
     private func startWatching() {
-        watcher?.cancel()
+        directoryWatcher?.cancel()
 
-        let descriptor = open(Self.fileURL.path, O_EVTONLY)
-        guard descriptor >= 0 else { return }
+        let directoryURL = dictionaryURL.deletingLastPathComponent()
+        do {
+            try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        } catch {
+            report(error, operation: .read, action: "monitorare")
+            return
+        }
+
+        let descriptor = open(directoryURL.path, O_EVTONLY)
+        guard descriptor >= 0 else {
+            let error = NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
+            report(error, operation: .read, action: "monitorare")
+            return
+        }
 
         let source = DispatchSource.makeFileSystemObjectSource(
             fileDescriptor: descriptor,
-            eventMask: [.write, .delete, .rename, .extend],
+            eventMask: [.write, .delete, .rename, .extend, .attrib],
             queue: .main
         )
 
         source.setEventHandler { [weak self] in
             guard let self else { return }
-            if !self.isSaving { self.load() }
-            self.startWatching()
+            self.reloadFromDisk()
+            // A directory event may mean the file inode was replaced. Rearm explicitly after
+            // reading the new file; cancellation itself cannot recursively trigger this path.
+            self.armFileWatcher()
         }
         source.setCancelHandler { close(descriptor) }
         source.resume()
 
-        watcher = source
+        directoryWatcher = source
+        armFileWatcher()
+    }
+
+    /// Follows the current dictionary inode to catch editors that modify it in place. File
+    /// replacement is handled by the directory watcher, which calls this method again.
+    private func armFileWatcher() {
+        fileWatcher?.cancel()
+        fileWatcher = nil
+
+        let descriptor = open(dictionaryURL.path, O_EVTONLY)
+        guard descriptor >= 0 else { return }
+
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: descriptor,
+            eventMask: [.write, .extend, .attrib, .delete, .rename],
+            queue: .main
+        )
+        source.setEventHandler { [weak self] in
+            self?.reloadFromDisk()
+        }
+        source.setCancelHandler { close(descriptor) }
+        source.resume()
+
+        fileWatcher = source
     }
 }

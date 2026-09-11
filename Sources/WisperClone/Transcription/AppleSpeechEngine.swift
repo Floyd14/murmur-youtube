@@ -29,6 +29,7 @@ actor AppleSpeechEngine: TranscriptionEngine {
     }
 
     func start() async throws -> AsyncThrowingStream<TranscriptionChunk, Error> {
+        try Task.checkCancellation()
         guard SpeechTranscriber.isAvailable else {
             throw TranscriptionError.localeUnsupported(locale)
         }
@@ -42,7 +43,8 @@ actor AppleSpeechEngine: TranscriptionEngine {
 
         try await Self.ensureModelInstalled(for: transcriber)
 
-        let (inputStream, inputContinuation) = AsyncStream<AnalyzerInput>.makeStream()
+        try Task.checkCancellation()
+        let (inputStream, inputContinuation) = AsyncStream<AnalyzerInput>.makeStream(bufferingPolicy: .bufferingOldest(512))
         self.inputContinuation = inputContinuation
 
         // Bias the recognizer toward the dictionary's words before it hears anything. This
@@ -62,6 +64,7 @@ actor AppleSpeechEngine: TranscriptionEngine {
             try? await analyzer.setContext(context)
         }
 
+        try Task.checkCancellation()
         finalizedText = ""
 
         let (chunks, chunkContinuation) = AsyncThrowingStream<TranscriptionChunk, Error>.makeStream()
@@ -78,30 +81,40 @@ actor AppleSpeechEngine: TranscriptionEngine {
                 chunkContinuation.yield(TranscriptionChunk(text: final, isFinal: true))
                 chunkContinuation.finish()
             } catch {
-                Log.speech.error("results stream failed: \(error.localizedDescription)")
+                Log.speech.error("results stream failed")
                 chunkContinuation.finish(throwing: error)
             }
         }
 
+        try Task.checkCancellation()
         try await analyzer.start(inputSequence: inputStream)
+        try Task.checkCancellation()
         Log.speech.info("SpeechAnalyzer started for \(resolvedLocale.identifier)")
 
         return chunks
     }
 
-    func feed(_ chunk: AudioChunk) async {
-        inputContinuation?.yield(AnalyzerInput(buffer: chunk.buffer))
+    func feed(_ chunk: AudioChunk) async throws {
+        try Task.checkCancellation()
+        guard let inputContinuation else { throw TranscriptionError.notRunning }
+        switch inputContinuation.yield(AnalyzerInput(buffer: chunk.buffer)) {
+        case .enqueued: return
+        case .dropped: throw TranscriptionError.audioBufferOverflow
+        case .terminated: throw TranscriptionError.notRunning
+        @unknown default: throw TranscriptionError.notRunning
+        }
     }
 
-    func finish() async {
+    func finish() async throws {
         inputContinuation?.finish()
         inputContinuation = nil
 
         do {
             try await analyzer?.finalizeAndFinishThroughEndOfInput()
         } catch {
-            Log.speech.error("finalize failed: \(error.localizedDescription)")
+            Log.speech.error("finalize failed")
             await analyzer?.cancelAndFinishNow()
+            throw error
         }
 
         analyzer = nil
@@ -181,7 +194,7 @@ actor AppleSpeechEngine: TranscriptionEngine {
                 Log.speech.info("speech model installed")
             }
         } catch {
-            throw TranscriptionError.modelInstallFailed(error.localizedDescription)
+            throw TranscriptionError.modelInstallFailed("Download non completato. Controlla la connessione e riprova.")
         }
     }
 }

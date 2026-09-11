@@ -27,6 +27,10 @@ struct DictionaryPanel: View {
                 Rectangle().fill(DS.Color.seam).frame(height: DS.Border.seam)
             }
 
+            if let error = store.persistenceError {
+                persistenceErrorBanner(error)
+            }
+
             if entries.isEmpty {
                 EmptyPanel(
                     label: store.entries.isEmpty ? "Dizionario vuoto" : "Nessun risultato",
@@ -57,10 +61,36 @@ struct DictionaryPanel: View {
             footer
         }
         .sheet(isPresented: $isAdding) {
-            DictionaryEditor(entry: nil) { store.add($0) }
+            DictionaryEditor(entry: nil) { entry in
+                store.add(entry) ? nil : store.persistenceError
+            }
         }
         .sheet(item: $editing) { entry in
-            DictionaryEditor(entry: entry) { store.update($0) }
+            DictionaryEditor(entry: entry) { updatedEntry in
+                store.update(updatedEntry) ? nil : store.persistenceError
+            }
+        }
+    }
+
+    private func persistenceErrorBanner(_ message: String) -> some View {
+        HStack(alignment: .top, spacing: DS.Space.snug) {
+            Lamp(color: DS.Color.meterAmber, isLit: true, size: 6)
+                .padding(.top, 3)
+            Text(message)
+                .font(DS.Font.label)
+                .foregroundStyle(DS.Color.inkOnDeck)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer()
+            Button("Chiudi") { store.clearPersistenceError() }
+                .buttonStyle(.plain)
+                .font(DS.Font.label)
+                .foregroundStyle(DS.Color.inkOnDeck.opacity(0.65))
+        }
+        .padding(.horizontal, DS.Space.base)
+        .padding(.vertical, DS.Space.snug)
+        .background(DS.Color.meterAmber.opacity(0.12))
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(DS.Color.meterAmber.opacity(0.35)).frame(height: DS.Border.hairline)
         }
     }
 
@@ -90,12 +120,12 @@ struct DictionaryPanel: View {
             Silkscreen(text: "\(store.entries.count) voci", color: DS.Color.inkOnDeck.opacity(0.5))
             Spacer()
             Button {
-                NSWorkspace.shared.activateFileViewerSelecting([DictionaryStore.fileURL])
+                NSWorkspace.shared.activateFileViewerSelecting([store.dictionaryURL])
             } label: {
                 Silkscreen(text: "Mostra dictionary.txt", color: DS.Color.inkOnDeck.opacity(0.5))
             }
             .buttonStyle(.plain)
-            .help(DictionaryStore.fileURL.path)
+            .help(store.dictionaryURL.path)
         }
         .padding(.horizontal, DS.Space.base)
         .padding(.vertical, DS.Space.snug)
@@ -167,14 +197,15 @@ private struct DictionaryRow: View {
 /// Add or edit one entry, with the false-positive warning shown live as you type.
 private struct DictionaryEditor: View {
     let entry: DictionaryEntry?
-    let onSave: (DictionaryEntry) -> Void
+    let onSave: (DictionaryEntry) -> String?
 
     @Environment(\.dismiss) private var dismiss
     @State private var kind: DictionaryEntry.Kind
     @State private var hear: String
     @State private var write: String
+    @State private var saveError: String?
 
-    init(entry: DictionaryEntry?, onSave: @escaping (DictionaryEntry) -> Void) {
+    init(entry: DictionaryEntry?, onSave: @escaping (DictionaryEntry) -> String?) {
         self.entry = entry
         self.onSave = onSave
         _kind = State(initialValue: entry?.kind ?? .term)
@@ -232,13 +263,30 @@ private struct DictionaryEditor: View {
                 )
             }
 
+            if let saveError {
+                HStack(alignment: .top, spacing: DS.Space.snug) {
+                    Lamp(color: DS.Color.meterAmber, isLit: true, size: 6)
+                        .padding(.top, 3)
+                    Text(saveError)
+                        .font(DS.Font.label)
+                        .foregroundStyle(DS.Color.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(DS.Space.snug)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .overlay(
+                    RoundedRectangle(cornerRadius: DS.Radius.chip)
+                        .strokeBorder(DS.Color.meterAmber.opacity(0.4), lineWidth: DS.Border.hairline)
+                )
+            }
+
             HStack(spacing: DS.Space.snug) {
                 Spacer()
                 TransportKey(title: "Annulla") { dismiss() }
                 TransportKey(title: "Salva", isEngaged: isValid, engagedColor: DS.Color.ink) {
                     guard isValid else { return }
-                    onSave(draft)
-                    dismiss()
+                    saveError = onSave(draft)
+                    if saveError == nil { dismiss() }
                 }
                 .disabled(!isValid)
             }

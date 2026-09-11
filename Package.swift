@@ -29,6 +29,12 @@ let package = Package(
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .testTarget(
+            name: "WisperCloneTests",
+            dependencies: ["WisperClone"],
+            path: "Tests/WisperCloneTests",
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+        .testTarget(
             name: "WisperFormattingTests",
             dependencies: ["WisperFormatting"],
             path: "Tests/WisperFormattingTests",

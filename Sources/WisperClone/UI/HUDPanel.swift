@@ -8,9 +8,11 @@ import SwiftUI
 /// nothing to insert into. Hence `.nonactivatingPanel` plus `canBecomeKey == false`.
 @MainActor
 final class HUDPanel: NSPanel {
+    private var presentationRevision = 0
+
     init(controller: DictationController) {
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: 108, height: 52),
+            contentRect: NSRect(x: 0, y: 0, width: 360, height: 160),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -54,6 +56,7 @@ final class HUDPanel: NSPanel {
     }
 
     func present() {
+        presentationRevision += 1
         // Every active state change (starting → listening → finishing) calls this. Without
         // the early exit the panel would reset to alpha 0 and re-fade on each one, which
         // reads as a flicker mid-utterance.
@@ -69,12 +72,17 @@ final class HUDPanel: NSPanel {
     }
 
     func dismiss() {
+        presentationRevision += 1
+        let revision = presentationRevision
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.16
             animator().alphaValue = 0
         } completionHandler: { [weak self] in
             // AppKit always calls this on the main thread.
-            MainActor.assumeIsolated { self?.orderOut(nil) }
+            MainActor.assumeIsolated {
+                guard let self, self.presentationRevision == revision else { return }
+                self.orderOut(nil)
+            }
         }
     }
 }

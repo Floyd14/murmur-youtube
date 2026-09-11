@@ -1,33 +1,35 @@
 import SwiftUI
 
-private enum HUDBrand {
-    static let accent = Color(red: 0.42, green: 0.55, blue: 1.0)
-    static let accentWarm = Color(red: 0.76, green: 0.47, blue: 1.0)
-
-    static var gradient: LinearGradient {
-        LinearGradient(
-            colors: [accent, accentWarm],
-            startPoint: .leading,
-            endPoint: .trailing
-        )
-    }
-}
-
 struct HUDView: View {
     @Bindable var controller: DictationController
 
     var body: some View {
-        Waveform(
-            level: controller.level,
-            isActive: controller.state == .listening,
-            style: isError
-                ? AnyShapeStyle(Color.red.opacity(0.9))
-                : AnyShapeStyle(HUDBrand.gradient)
-        )
-        .frame(width: 76, height: 26)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 13)
-        .frame(width: 108, height: 52)
+        Group {
+            if case .error(let message) = controller.state {
+                Text(message)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(14)
+                    .frame(width: 340)
+            } else {
+                VStack(spacing: 4) {
+                    Waveform(
+                        level: controller.level,
+                        isActive: controller.state == .listening,
+                        style: AnyShapeStyle(DS.Color.record)
+                    )
+                    .frame(width: 76, height: 26)
+                    if controller.state == .starting || controller.state == .finishing {
+                        Text(controller.state == .starting ? "Avvio…" : "Trascrizione…")
+                            .font(.system(size: 10))
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 13)
+                .frame(width: 140, height: 72)
+            }
+        }
         .background {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(.ultraThinMaterial)
@@ -39,11 +41,6 @@ struct HUDView: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityStatus)
-    }
-
-    private var isError: Bool {
-        if case .error = controller.state { return true }
-        return false
     }
 
     private var accessibilityStatus: String {

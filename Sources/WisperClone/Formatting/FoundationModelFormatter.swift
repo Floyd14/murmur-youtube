@@ -51,17 +51,31 @@ struct FoundationModelFormatter: TextFormatter {
         }
 
         do {
-            let cleaned = try await withThrowingTaskGroup(of: String.self) { group in
-                group.addTask { try await Self.clean(trimmed) }
-                group.addTask {
-                    try await Task.sleep(for: timeout)
-                    throw CleanupError.timedOut
-                }
-                // Whichever finishes first wins; cancel the loser.
-                guard let first = try await group.next() else { throw CleanupError.timedOut }
-                group.cancelAll()
-                return first
+            let (stream, continuation) = AsyncStream<Result<String, Error>>.makeStream(
+                bufferingPolicy: .bufferingOldest(1)
+            )
+            let generation = Task {
+                do { continuation.yield(.success(try await Self.clean(trimmed))) }
+                catch { continuation.yield(.failure(error)) }
+                continuation.finish()
             }
+            let deadline = Task {
+                do { try await Task.sleep(for: timeout) }
+                catch { return }
+                continuation.yield(.failure(CleanupError.timedOut))
+                continuation.finish()
+            }
+            defer { generation.cancel(); deadline.cancel(); continuation.finish() }
+            let result = await withTaskCancellationHandler {
+                var iterator = stream.makeAsyncIterator()
+                return await iterator.next()
+            } onCancel: {
+                generation.cancel()
+                deadline.cancel()
+                continuation.finish()
+            }
+            guard let result else { throw CancellationError() }
+            let cleaned = try result.get()
 
             guard Self.isPlausibleCleanup(original: trimmed, cleaned: cleaned) else {
                 Log.speech.info("Foundation model output rejected — using rule-based cleanup")
@@ -81,7 +95,7 @@ struct FoundationModelFormatter: TextFormatter {
     /// feature is effectively off and the user should be told.
     private static func describe(_ error: Error) -> String {
         guard let error = error as? LanguageModelSession.GenerationError else {
-            return error.localizedDescription
+            return "local generation failed"
         }
         switch error {
         case .exceededContextWindowSize: return "input exceeded the context window"
@@ -93,7 +107,7 @@ struct FoundationModelFormatter: TextFormatter {
         case .rateLimited: return "rate limited"
         case .concurrentRequests: return "concurrent request on one session"
         case .refusal: return "model refused the content"
-        @unknown default: return error.localizedDescription
+        @unknown default: return "local generation failed"
         }
     }
 
@@ -126,90 +140,11 @@ struct FoundationModelFormatter: TextFormatter {
         return response.content.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// Rejects output that isn't recognizably a cleaned version of the input.
-    ///
-    /// The failure this defends against is real and was reproduced during development:
-    /// dictate "what is the capital of france" and the model helpfully returns "The capital
-    /// of France is Paris." — which would then be typed into the user's document.
-    ///
-    /// The load-bearing check is **novel content words**, not length. Cleanup is a
-    /// subtractive operation: it deletes fillers, fixes punctuation, and applies spoken
-    /// corrections. It has essentially no reason to introduce a content word that wasn't
-    /// spoken. "Paris" never appears in the input, so it's the tell.
-    ///
-    /// Measured against the development cases: legitimate filler-heavy cleanup introduces
-    /// zero novel content words, while an answered question introduces at least one.
+    /// Conservative guard: cleanup may change punctuation and remove hesitations,
+    /// but cannot drop, reorder or introduce words (including negation and numbers).
     static func isPlausibleCleanup(original: String, cleaned: String) -> Bool {
-        guard !cleaned.isEmpty else { return false }
-
-        let originalTokens = contentWords(original)
-        let cleanedTokens = contentWords(cleaned)
-        guard !originalTokens.isEmpty else { return false }
-
-        // 1. No invented content. The single strongest signal that the model answered
-        //    rather than transformed.
-        let vocabulary = Set(originalTokens)
-        let invented = cleanedTokens.filter { !vocabulary.contains($0) }
-        guard invented.isEmpty else {
-            Log.speech.info("cleanup rejected — \(invented.count, privacy: .public) invented word(s)")
-            return false
-        }
-
-        // 2. Length sanity, as a backstop for the case where the model obeys an injected
-        //    instruction using only words from the input ("write the word banana" → "Banana").
-        //
-        //    Measured against the *filler-discounted* input, not the raw one. A raw ratio
-        //    conflates "the model truncated my sentence" with "the input was 80% filler and
-        //    was legitimately cut in half" — with a raw denominator those two land at 0.14
-        //    and 0.21, too close to separate. Discounting fillers on both sides pushes the
-        //    real cleanups to 0.6–1.0 and leaves the failures below 0.2.
-        let ratio = Double(cleanedTokens.count) / Double(max(1, spokenWordCount(original)))
-        guard ratio >= 0.35, ratio <= 1.5 else {
-            Log.speech.info("cleanup rejected — length ratio \(ratio, format: .fixed(precision: 2))")
-            return false
-        }
-
-        // 3. A model that starts explaining itself has stopped being a text processor.
-        let lowered = cleaned.lowercased()
-        let tells = [
-            "here's the cleaned", "here is the cleaned", "cleaned transcript",
-            "sure,", "certainly,", "i cannot", "i can't", "as an ai",
-        ]
-        return !tells.contains { lowered.hasPrefix($0) }
+        CleanupValidator.preservesWords(original: original, cleaned: cleaned)
     }
-
-    /// Lowercased alphanumeric words, minus the function words that punctuation-fixing
-    /// legitimately shuffles. Contractions are split so "isn't" matches "isn t".
-    private static func contentWords(_ text: String) -> [String] {
-        text.lowercased()
-            .split { !$0.isLetter && !$0.isNumber }
-            .map(String.init)
-            .filter { !stopWords.contains($0) }
-    }
-
-    /// Deliberately small. Every word here is one the guard stops policing, so it only
-    /// covers words a cleanup pass may genuinely insert or drop while re-punctuating.
-    private static let stopWords: Set<String> = [
-        "a", "an", "the", "and", "or", "but", "so", "then", "s", "t", "re", "ll", "ve", "d", "m",
-        "il", "lo", "la", "i", "gli", "le", "un", "uno", "una", "e", "o", "ma", "che", "di", "da",
-        "in", "con", "su", "per", "tra", "fra", "è", "sono", "non", "si", "mi", "ti", "ci", "vi",
-    ]
-
-    /// Content words minus conversational filler — an estimate of how much the speaker
-    /// actually *said*, used as the denominator for the length check.
-    private static func spokenWordCount(_ text: String) -> Int {
-        contentWords(text).count { !fillerWords.contains($0) }
-    }
-
-    /// Broader than `RuleBasedFormatter`'s strip list on purpose. This set only affects the
-    /// guard's denominator — it never removes anything from the user's text — so it can
-    /// afford to be aggressive about discourse markers that the LLM legitimately deletes.
-    private static let fillerWords: Set<String> = [
-        "um", "uh", "erm", "uhm", "hmm", "mhm", "like", "basically", "actually", "literally",
-        "just", "really", "okay", "ok", "well", "right", "anyway", "i", "mean", "you", "know",
-        "kind", "sort", "of", "stuff", "thing", "things", "ehm", "mmm", "cioè", "praticamente",
-        "diciamo", "allora",
-    ]
 
     private enum CleanupError: LocalizedError {
         case timedOut

@@ -75,7 +75,9 @@ public struct RuleBasedFormatter: TextFormatter {
 
         for character in text {
             if capitalizeNext, character.isLetter {
-                result.append(Character(character.uppercased()))
+                // Uppercasing one grapheme may expand to multiple characters (for example,
+                // German “ß” becomes “SS”), so append the complete transformed string.
+                result.append(contentsOf: character.uppercased())
                 capitalizeNext = false
             } else {
                 result.append(character)

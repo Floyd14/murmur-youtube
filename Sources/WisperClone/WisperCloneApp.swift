@@ -40,6 +40,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             retryActivation()
         }
 
+        if ProcessInfo.processInfo.arguments.contains("--enable-login-item") {
+            LoginItemManager.shared.setEnabled(true)
+        }
+
         observeState()
         Log.app.info("WisperClone pronto — tieni premuto \(Settings.shared.pushToTalkKey.displayName)")
     }
@@ -54,7 +58,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } onChange: { [weak self] in
             Task { @MainActor in
                 guard let self else { return }
-                if self.controller.state.isActive {
+                if self.controller.state.showsHUD {
                     self.hud?.present()
                 } else {
                     self.hud?.dismiss()
@@ -108,6 +112,12 @@ private struct MenuContent: View {
         Toggle("Suoni", isOn: $settings.soundEnabled)
 
         Divider()
+
+        if !controller.recoverableTranscript.isEmpty {
+            Button("Copia ultima dettatura") { controller.copyRecoveredTranscript() }
+            Button("Elimina dettatura recuperabile") { controller.discardRecoveredTranscript() }
+            Text("Recupero in memoria per 5 minuti")
+        }
 
         Button("Apri WisperClone") {
             openWindow(id: "main")

@@ -20,77 +20,64 @@ import Foundation
 /// target app, so "the focused element" is still their text field.
 @MainActor
 enum TextInjector {
-    static func insert(_ text: String) {
-        guard !text.isEmpty else { return }
+    enum Outcome: Equatable, Sendable {
+        case inserted
+        case unverified
+        case failed(String)
+    }
 
-        switch insertViaAccessibility(text) {
-        case .inserted:
-            Log.inject.info("inserted via AX (\(text.count) chars)")
-        case .unverified(let reason):
-            Log.inject.info("AX insert not verified (\(reason, privacy: .public)) — pasting")
-            insertViaPasteboard(text)
+    struct Target {
+        let pid: pid_t?
+        let element: AXUIElement?
+
+        @MainActor func isFocused() -> Bool {
+            guard let pid, NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else {
+                return false
+            }
+            guard let element else { return true }
+            guard let current = TextInjector.focusedElement() else { return false }
+            return CFEqual(element, current)
         }
     }
 
-    private enum AXOutcome {
-        case inserted
-        case unverified(String)
+    static func captureTarget() -> Target {
+        Target(pid: NSWorkspace.shared.frontmostApplication?.processIdentifier, element: focusedElement())
     }
 
-    // MARK: - Strategy 1: Accessibility, verified
-
-    private static func insertViaAccessibility(_ text: String) -> AXOutcome {
-        let systemWide = AXUIElementCreateSystemWide()
-
+    private static func focusedElement() -> AXUIElement? {
         var focused: CFTypeRef?
         guard AXUIElementCopyAttributeValue(
-            systemWide,
-            kAXFocusedUIElementAttribute as CFString,
-            &focused
-        ) == .success, let focused else {
-            return .unverified("no focused element")
+            AXUIElementCreateSystemWide(), kAXFocusedUIElementAttribute as CFString, &focused
+        ) == .success, let focused, CFGetTypeID(focused) == AXUIElementGetTypeID() else { return nil }
+        return unsafeDowncast(focused as AnyObject, to: AXUIElement.self)
+    }
+
+    static func insert(_ text: String, into target: Target) async -> Outcome {
+        guard !text.isEmpty else { return .failed("La trascrizione è vuota.") }
+        guard !Task.isCancelled, target.isFocused() else {
+            return .failed("Il campo di destinazione è cambiato. Puoi copiare la dettatura dal menu.")
         }
 
-        let element = unsafeDowncast(focused as AnyObject, to: AXUIElement.self)
-
-        var settable: DarwinBoolean = false
-        guard AXUIElementIsAttributeSettable(
-            element,
-            kAXSelectedTextAttribute as CFString,
-            &settable
-        ) == .success, settable.boolValue else {
-            return .unverified("selected text not settable")
+        if let element = target.element, let before = selectedRange(of: element) {
+            var settable: DarwinBoolean = false
+            if AXUIElementIsAttributeSettable(element, kAXSelectedTextAttribute as CFString, &settable) == .success,
+               settable.boolValue,
+               AXUIElementSetAttributeValue(element, kAXSelectedTextAttribute as CFString, text as CFString) == .success {
+                // Allow asynchronous AX implementations to settle before considering paste.
+                for _ in 0..<4 {
+                    guard target.isFocused() else { return .unverified }
+                    guard let after = selectedRange(of: element) else { return .unverified }
+                    if moved(before, after) { return .inserted }
+                    do { try await Task.sleep(for: .milliseconds(25)) }
+                    catch { return .unverified }
+                }
+            }
         }
+        return await insertViaPasteboard(text, into: target)
+    }
 
-        // Without a readable insertion point there's no way to tell a real insert from a
-        // silently-dropped one, so don't gamble — go straight to the fallback.
-        guard let before = selectedRange(of: element) else {
-            return .unverified("no readable selection range")
-        }
-
-        guard AXUIElementSetAttributeValue(
-            element,
-            kAXSelectedTextAttribute as CFString,
-            text as CFString
-        ) == .success else {
-            return .unverified("set attribute failed")
-        }
-
-        guard let after = selectedRange(of: element) else {
-            return .unverified("selection range unreadable after write")
-        }
-
-        // Deliberately a *movement* check, not an exact-length check. Falling back after a
-        // write that actually landed would paste the text a second time, and a duplicated
-        // paragraph is far worse than a missing one. Some apps normalize newlines or run
-        // autocorrect, so the caret can legitimately advance by something other than the
-        // UTF-16 count — only a completely unmoved selection proves nothing happened.
-        let unchanged = after.location == before.location && after.length == before.length
-        guard !unchanged else {
-            return .unverified("selection unmoved at \(before.location)")
-        }
-
-        return .inserted
+    private static func moved(_ before: CFRange, _ after: CFRange) -> Bool {
+        before.location != after.location || before.length != after.length
     }
 
     private static func selectedRange(of element: AXUIElement) -> CFRange? {
@@ -101,6 +88,7 @@ enum TextInjector {
             &value
         ) == .success, let value else { return nil }
 
+        guard CFGetTypeID(value) == AXValueGetTypeID() else { return nil }
         let axValue = unsafeDowncast(value as AnyObject, to: AXValue.self)
         guard AXValueGetType(axValue) == .cfRange else { return nil }
 
@@ -111,45 +99,47 @@ enum TextInjector {
 
     // MARK: - Strategy 2: Pasteboard + ⌘V
 
-    private static func insertViaPasteboard(_ text: String) {
+    private static func insertViaPasteboard(_ text: String, into target: Target) async -> Outcome {
+        guard !Task.isCancelled, target.isFocused() else {
+            return .failed("Inserimento annullato: il campo attivo è cambiato.")
+        }
         let pasteboard = NSPasteboard.general
-        let saved = pasteboard.pasteboardItems?.compactMap { item -> [NSPasteboard.PasteboardType: Data] in
+        let saved = pasteboard.pasteboardItems?.map { item -> [NSPasteboard.PasteboardType: Data] in
             var copy: [NSPasteboard.PasteboardType: Data] = [:]
-            for type in item.types {
-                if let data = item.data(forType: type) { copy[type] = data }
-            }
+            for type in item.types { if let data = item.data(forType: type) { copy[type] = data } }
             return copy
         }
-
         pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
+        let written = pasteboard.setString(text, forType: .string)
         let injectedChangeCount = pasteboard.changeCount
-
-        Task { @MainActor in
-            // Give the target app a moment to observe the new pasteboard generation before
-            // ⌘V arrives, or a fast paste can grab the *previous* contents.
-            try? await Task.sleep(for: .milliseconds(40))
-            guard pasteboard.changeCount == injectedChangeCount else {
-                Log.inject.info("pasteboard changed by user — paste cancelled")
-                return
-            }
-            postCommandV()
-            Log.inject.info("pasted (\(text.count) chars)")
-
-            // The paste is asynchronous in the target app; restore only once it's had time
-            // to read the pasteboard.
-            try? await Task.sleep(for: .milliseconds(500))
-            restore(saved, to: pasteboard, ifUnchangedSince: injectedChangeCount)
+        defer { restore(saved, to: pasteboard, ifUnchangedSince: injectedChangeCount) }
+        guard written else { return .failed("Impossibile preparare gli appunti.") }
+        do { try await Task.sleep(for: .milliseconds(40)) }
+        catch { return .failed("Inserimento annullato.") }
+        guard pasteboard.changeCount == injectedChangeCount else {
+            return .failed("Gli appunti sono cambiati. Dettatura disponibile nel menu.")
         }
+        guard target.isFocused() else { return .failed("Il campo attivo è cambiato.") }
+        let before = target.element.flatMap { selectedRange(of: $0) }
+        guard postCommandV() else { return .failed("Impossibile inviare il comando Incolla.") }
+        // A posted keystroke is not a delivery receipt. Observe the caret when available.
+        for _ in 0..<20 {
+            do { try await Task.sleep(for: .milliseconds(50)) }
+            catch { return .unverified }
+            guard target.isFocused() else { return .unverified }
+            if let element = target.element, let before, let after = selectedRange(of: element),
+               moved(before, after) { return .inserted }
+        }
+        return .unverified
     }
 
-    private static func postCommandV() {
-        guard let source = CGEventSource(stateID: .privateState) else { return }
+    private static func postCommandV() -> Bool {
+        guard let source = CGEventSource(stateID: .privateState) else { return false }
         let vKey: CGKeyCode = 9 // kVK_ANSI_V
 
         guard let down = CGEvent(keyboardEventSource: source, virtualKey: vKey, keyDown: true),
               let up = CGEvent(keyboardEventSource: source, virtualKey: vKey, keyDown: false)
-        else { return }
+        else { return false }
 
         // Set explicitly rather than inheriting live hardware modifier state — the user may
         // still be resting a finger on something.
@@ -158,6 +148,7 @@ enum TextInjector {
 
         down.post(tap: .cghidEventTap)
         up.post(tap: .cghidEventTap)
+        return true
     }
 
     private static func restore(

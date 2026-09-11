@@ -1,3 +1,5 @@
+import AppKit
+import ServiceManagement
 import SwiftUI
 
 struct SettingsWindow: View {
@@ -6,6 +8,7 @@ struct SettingsWindow: View {
     @AppStorage(PreferenceKeys.onboardingCompleted) private var onboardingCompleted = false
     @State private var hasAccessibility = Permissions.hasAccessibility
     @State private var hasMicrophone = Permissions.hasMicrophone
+    @State private var loginItem = LoginItemManager.shared
 
     var body: some View {
         ZStack {
@@ -54,6 +57,30 @@ struct SettingsWindow: View {
                         }
                     }
 
+                    panel(label: "AVVIO") {
+                        HStack {
+                            settingToggle("Avvia WisperClone all'accesso", isOn: loginItemBinding)
+                                .disabled(loginItem.status == .notFound)
+                            Spacer()
+                            Silkscreen(text: loginItemStatusLabel, color: DS.Color.inkSecondary)
+                        }
+
+                        note(loginItemStatusDescription)
+
+                        if loginItem.status == .requiresApproval {
+                            TransportKey(title: "Apri Impostazioni di Sistema") {
+                                openLoginItemsSettings()
+                            }
+                        }
+
+                        if let error = loginItem.error {
+                            Text("Impossibile modificare l'avvio automatico: \(error)")
+                                .font(DS.Font.label)
+                                .foregroundStyle(DS.Color.ink)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+
                     panel(label: "PRIVACY E PERMESSI") {
                         permissionLine("Accessibilità", granted: hasAccessibility) {
                             Permissions.promptForAccessibility()
@@ -89,6 +116,7 @@ struct SettingsWindow: View {
             while !Task.isCancelled {
                 hasAccessibility = Permissions.hasAccessibility
                 hasMicrophone = Permissions.hasMicrophone
+                loginItem.refresh()
                 try? await Task.sleep(for: .seconds(1))
             }
         }
@@ -97,6 +125,50 @@ struct SettingsWindow: View {
     private var versionLabel: String {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
         return "WISPER CLONE \(version ?? "—") · LOCALE"
+    }
+
+    private var loginItemBinding: Binding<Bool> {
+        Binding(
+            get: {
+                loginItem.status == .enabled || loginItem.status == .requiresApproval
+            },
+            set: { loginItem.setEnabled($0) }
+        )
+    }
+
+    private var loginItemStatusLabel: String {
+        switch loginItem.status {
+        case .enabled:
+            "ATTIVO"
+        case .requiresApproval:
+            "RICHIEDE APPROVAZIONE"
+        case .notRegistered:
+            "DISATTIVO"
+        case .notFound:
+            "NON DISPONIBILE"
+        @unknown default:
+            "STATO SCONOSCIUTO"
+        }
+    }
+
+    private var loginItemStatusDescription: String {
+        switch loginItem.status {
+        case .enabled:
+            "WisperClone si aprirà automaticamente ai prossimi accessi al Mac."
+        case .requiresApproval:
+            "La registrazione esiste, ma macOS richiede la tua approvazione in Generali > Elementi login ed estensioni."
+        case .notRegistered:
+            "WisperClone non è registrato tra gli elementi che si aprono all'accesso."
+        case .notFound:
+            "macOS non trova il servizio dell'app. Installa e avvia la versione firmata da Applicazioni."
+        @unknown default:
+            "macOS ha restituito uno stato dell'elemento di login non riconosciuto."
+        }
+    }
+
+    private func openLoginItemsSettings() {
+        let url = URL(string: "x-apple.systempreferences:com.apple.LoginItems-Settings.extension")!
+        NSWorkspace.shared.open(url)
     }
 
     private func panel<Content: View>(
