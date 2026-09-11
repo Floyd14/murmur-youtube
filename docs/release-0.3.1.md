@@ -1,6 +1,6 @@
 # WisperClone 0.3.1
 
-Stato: hotfix build 13 compilata, firmata e installata. La prova live di acquisizione e arresto del microfono passa; il collaudo con Alt fisico e voce → testo resta separato.
+Stato: hotfix build 13 compilata, firmata, installata e [pubblicata](https://github.com/Floyd14/murmur-youtube/releases/tag/wisperclone-v0.3.1). La prova live di acquisizione e arresto del microfono passa; il collaudo con Alt fisico e voce → testo resta separato.
 
 ## Correzione principale
 
@@ -38,3 +38,9 @@ La build mantiene l'identità `com.andreavisini.wisperclone.app` e il percorso `
 ```text
 /Users/andreavisini/Library/Caches/WisperCloneBuild/rollback/WisperClone-0.2.9.app
 ```
+
+## Audit dopo pubblicazione
+
+La rilettura GitHub conferma release non draft e asset caricati. Tag `wisperclone-v0.3.1` e codice applicativo: `cfaccd88b576447b198d8fdd636945368a403598`. ZIP `WisperClone-0.3.1-macOS-arm64.zip`, 670620 byte; SHA-256 locale e digest GitHub concordi: `6201bfb2dc488cd6de5181b18c7120c13a763bfc6d0982e5b31c19f411556504`.
+
+Dopo pubblicazione, firma della copia installata ancora valida e processo 25346 ancora presente. Nel controllo dei rapporti crash risultava soltanto il rapporto storico della 0.3.0. Questo conferma la consegna dell’artefatto e la sopravvivenza alla prova di acquisizione/arresto; le esclusioni del collaudo indicate sopra restano aperte.

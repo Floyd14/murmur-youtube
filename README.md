@@ -93,7 +93,7 @@ codesign --verify --deep --strict \
   "$HOME/Library/Caches/WisperCloneBuild/WisperClone.app"
 ```
 
-La suite della hotfix 0.3.1 build 13 ha superato 30 test in 8 suite, incluso il test che esegue l'handler audio fuori dal MainActor. I test coprono ingress audio, conversione e flush, controller, dizionario, pulizia e Unicode; non possono provare microfono reale, tasto Alt fisico, stato TCC, mantenimento del focus o inserimento in processi esterni. Build release, firma e installazione della hotfix sono verificate; il collaudo live resta aperto.
+La suite della hotfix 0.3.1 build 13 ha superato 30 test in 8 suite, incluso il test che esegue l'handler audio fuori dal MainActor. I test coprono ingress audio, conversione e flush, controller, dizionario, pulizia e Unicode; non possono provare microfono reale, tasto Alt fisico, stato TCC, mantenimento del focus o inserimento in processi esterni. Build release, firma e installazione della hotfix sono verificate; il collaudo completo voce → testo resta aperto.
 
 La validazione manuale voce → testo resta necessaria in TextEdit, Note, un browser e un editor Electron, includendo una parola breve e una dettatura immediata dopo Alt. La verifica di login richiede un nuovo accesso a macOS; non è sostituita dal solo stato letto dall'app.
 
@@ -112,4 +112,4 @@ Il rollback previsto usa la copia firmata precedente nella cache locale, se pres
 /Users/andreavisini/Library/Caches/WisperCloneBuild/rollback/WisperClone-0.2.9.app
 ```
 
-La hotfix è identificata come 0.3.1 build 13. Il rollback previsto usa la copia firmata precedente nella cache locale; lo stato della pubblicazione e dell'installazione deve essere verificato dopo i gate runtime.
+La [hotfix 0.3.1 build 13](https://github.com/Floyd14/murmur-youtube/releases/tag/wisperclone-v0.3.1) è pubblicata e installata. Le ricevute di consegna e i limiti del collaudo sono nella [nota di release](docs/release-0.3.1.md).
