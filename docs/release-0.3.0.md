@@ -1,6 +1,6 @@
 # WisperClone 0.3.0
 
-Stato: versione installata e firma verificata. Registrazione al login attiva; pubblicazione in corso.
+Stato: versione pubblicata e installata, firma verificata e registrazione al login attiva. Vedi [audit dopo pubblicazione](audit-post-release-2026-09-11.md) per evidenze e blocco sui permessi TCC.
 
 ## Cosa cambia
 
@@ -28,4 +28,4 @@ La build mantiene l'identità `com.andreavisini.wisperclone.app`, l'eseguibile `
 /Users/andreavisini/Library/Caches/WisperCloneBuild/rollback/WisperClone-0.2.9.app
 ```
 
-La pubblicazione è pianificata sul branch `feature/wisperclone-onboarding` con tag `wisperclone-v0.3.0`; la conferma della pubblicazione sarà riportata nell’audit successivo alla release.
+La pubblicazione è disponibile sul branch `feature/wisperclone-onboarding` con tag `wisperclone-v0.3.0`; i riscontri di pubblicazione e installazione sono riportati nell’audit dopo pubblicazione.
